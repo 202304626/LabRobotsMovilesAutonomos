@@ -72,20 +72,47 @@ class NodeMapper(Node):
                 qos_profile=qos_lidar_profile,
             )
         
-    def AnalyzeLiDAR(self, msg: LaserScan):
+    def AnalyzeLiDAR(self, msg):
+        # --- 1. Calculate Indices ---
+        # Front index (Angle 0.0)
         index_front = int((0.0 - msg.angle_min) / msg.angle_increment)
-        dist = msg.ranges[index_front]
-        if math.isfinite(dist) and msg.range_min <= dist <= msg.range_max:
-            self.distance_front = dist  # Guarda distancia
-            # print(f"Distancia frontal VÁLIDA: {dist:.2f} m")
-            if dist < OBSTACLE_THRESHOLD:
-                # print("¡OBSTÁCULO CERCA! Parando...")
-                stop_msg = Twist()
-                stop_msg.linear.x = 0.0  # Velocidad cero
-                stop_msg.angular.z = 0.0 
-                self._publisher.publish(stop_msg)  # Para teleop
-        else:
-            self.distance_front = float("inf")  # Sin obstáculo
+        
+        # Back index (Angle PI, or 180 degrees)
+        index_back = int((math.pi - msg.angle_min) / msg.angle_increment)
+
+        # Protección: Si el cálculo se sale del array, usamos el último elemento disponible
+        if index_back >= len(msg.ranges):
+            index_back = len(msg.ranges) - 1
+
+        # --- 2. Get Distances ---
+        dist_front = msg.ranges[index_front]
+        dist_back = msg.ranges[index_back]
+
+        # --- 3. Verify validity of the data ---
+        # We check if the readings are valid numbers (not infinite) and within range
+        valid_front = math.isfinite(dist_front) and msg.range_min <= dist_front <= msg.range_max
+        valid_back = math.isfinite(dist_back) and msg.range_min <= dist_back <= msg.range_max
+
+        # Assign values for visualization or external logic
+        self.distance_front = dist_front if valid_front else float("inf")
+        self.distance_back = dist_back if valid_back else float("inf")
+
+        # --- 4. STOP LOGIC ---
+        # Condition: (Obstacle in front) OR (Obstacle behind)
+        danger_front = valid_front and (dist_front < OBSTACLE_THRESHOLD)
+        danger_back = valid_back and (dist_back < OBSTACLE_THRESHOLD)
+
+        if danger_front or danger_back:
+            if danger_front:
+                print(f"DANGER IN FRONT! Distance: {dist_front:.2f}m")
+            if danger_back:
+                print(f"DANGER BEHIND! Distance: {dist_back:.2f}m")
+
+            # Stop the robot
+            stop_msg = Twist()
+            stop_msg.linear.x = 0.0
+            stop_msg.angular.z = 0.0
+            self._publisher.publish(stop_msg)
 
 
 
