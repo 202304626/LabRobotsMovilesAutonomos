@@ -1,0 +1,102 @@
+<?xml version="1.0"?>
+<!-- Declaración estándar XML -->
+
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd"
+           schematypens="http://www.w3.org/2001/XMLSchema"?>
+<!--
+  Indica el esquema oficial de ROS 2 para validar este archivo package.xml
+  usando el formato 3.
+-->
+
+<package format="3">
+  <!-- Abre la definición del paquete ROS 2 usando formato 3 -->
+
+  <name>more_interfaces</name>
+  <!--
+    Nombre del paquete.
+    Debe coincidir con:
+      - la carpeta del paquete
+      - project() en CMakeLists.txt
+  -->
+
+  <version>0.0.0</version>
+  <!-- Versión del paquete -->
+
+  <description>Paquete que envia las teclas presionadas</description>
+  <!--
+    Descripción del paquete.
+    Conviene cambiarlo por algo real, por ejemplo:
+    "Paquete que define mensajes personalizados para ROS 2".
+  -->
+
+  <maintainer email="liam.esgon@gmail.com">ros</maintainer>
+  <!--
+    Persona responsable del mantenimiento del paquete.
+    Incluye correo electrónico.
+  -->
+
+  <license>Apache-2.0</license>
+  <!--
+    Licencia del software.
+    Apache 2.0 es común en ROS.
+  -->
+
+  <!-- =============================== -->
+  <!-- DEPENDENCIAS DE CONSTRUCCIÓN   -->
+  <!-- =============================== -->
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <!--
+    Indica que el paquete usa ament_cmake como sistema de build.
+  -->
+
+  <buildtool_depend>rosidl_default_generators</buildtool_depend>
+  <!--
+    Necesario para generar código de mensajes, servicios y acciones.
+  -->
+
+  <!-- =============================== -->
+  <!-- DEPENDENCIAS EN EJECUCIÓN      -->
+  <!-- =============================== -->
+
+  <exec_depend>rosidl_default_runtime</exec_depend>
+  <!--
+    Dependencia que necesitarán otros paquetes para usar
+    estos mensajes en tiempo de ejecución.
+  -->
+
+  <!-- =============================== -->
+  <!-- GRUPO DE PAQUETES DE INTERFAZ  -->
+  <!-- =============================== -->
+
+  <member_of_group>rosidl_interface_packages</member_of_group>
+  <!--
+    Obligatorio cuando el paquete define interfaces (.msg, .srv, .action).
+    Le dice a ROS 2 que este es un paquete de interfaces.
+  -->
+
+  <!-- =============================== -->
+  <!-- DEPENDENCIAS DE TESTING        -->
+  <!-- =============================== -->
+
+  <test_depend>ament_lint_auto</test_depend>
+  <!-- Herramientas automáticas de análisis de código -->
+
+  <test_depend>ament_lint_common</test_depend>
+  <!-- Conjunto estándar de linters de ROS 2 -->
+
+  <!-- =============================== -->
+  <!-- EXPORT                         -->
+  <!-- =============================== -->
+
+  <export>
+    <!-- Información exportada para otros paquetes -->
+
+    <build_type>ament_cmake</build_type>
+    <!--
+      Indica que este paquete se construye usando ament_cmake.
+    -->
+  </export>
+
+</package>
+<!-- Cierre del paquete -->
