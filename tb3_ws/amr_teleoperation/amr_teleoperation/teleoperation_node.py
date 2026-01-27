@@ -113,61 +113,105 @@ class NodeMapper(Node):
 
     def AnalyzeLiDAR(self, msg: LaserScan):
 
+        """
+        
+        Process incoming LaserScan data to detect obstacles in front of and behind the robot.
+
+        This callback estimates the nearest obstacle distance in two directions by taking the
+        minimum valid range within an angular window around:
+            - 0 radians (front direction)
+            - pi radians (rear direction)
+
+        Using a window (instead of a single ray) makes the detection more robust to noise,
+        missing/invalid measurements (inf/nan), and small misalignments of the sensor.
+
+        If the minimum distance in either window is below OBSTACLE_THRESHOLD, the node
+        publishes a zero-velocity Twist command to stop the robot (only once when entering
+        the blocked state) and sets internal flags to block further forward/backward commands.
+
+        Args:
+            msg (sensor_msgs.msg.LaserScan): LiDAR scan message containing ranges and scan geometry.
+
+        Returns:
+            None
+
+        """
+
+        # Number of range measurements in the scan (one per angle)
         N = len(msg.ranges)
+
+        # Edge case: if there are no measurements or the angular increment is zero,
         if N == 0 or msg.angle_increment == 0.0:
             self.get_logger().warn("Empty scan or angle_increment=0")
             return
 
+        # Helper function: returns the minimum valid distance within an angular window
         def min_range_around(target_angle_rad: float, half_window_deg: float = 10.0) -> float:
             half_window = math.radians(half_window_deg)
 
+            # Index of the ray closest to the target angle:
             i_center = int((target_angle_rad - msg.angle_min) / msg.angle_increment)
             i_delta = max(1, int(half_window / msg.angle_increment))
 
             i0 = max(0, i_center - i_delta)
             i1 = min(N - 1, i_center + i_delta)
 
+            # Search for the minimum valid range within the window
             best = float("inf")
             for i in range(i0, i1 + 1):
                 r = msg.ranges[i]
+                
+                # Only consider finite readings within the sensor limits
                 if math.isfinite(r) and (msg.range_min <= r <= msg.range_max):
                     if r < best:
                         best = r
+            
+            # If no valid reading was found, this will return infinity
             return best
 
-        # Distances
+        # Distances estimated in front and behind as the minimum within a ±10° window
         dist_front = min_range_around(0.0, half_window_deg=10.0)
         dist_back  = min_range_around(math.pi, half_window_deg=10.0)
 
+        # Store distances for possible use by other methods or for debugging
         self.distance_front = dist_front
         self.distance_back = dist_back
 
+        # Informative log to observe the measured distances
         self.get_logger().info(f"Front: {dist_front:.3f} m | Back: {dist_back:.3f} m")
 
+        # Determine whether there is danger by comparing with the safety threshold
         danger_front = dist_front < OBSTACLE_THRESHOLD
         danger_back  = dist_back  < OBSTACLE_THRESHOLD
 
+        # Informative log to observe the velocities
         self.get_logger().info(f"Angular vel: {self.vel_ang}")
         self.get_logger().info(f"Linear vel: {self.vel_lin}")
 
+        # If an obstacle is detected in front or behind
         if danger_front or danger_back:
 
+            # If this is the first time entering a blocked state, publish a stop command
             if not self.obstacle_stop_front and not self.obstacle_stop_back:
 
+                # Force commanded velocities to zero
                 self.vel_lin = 0.0
                 self.vel_ang = 0.0
 
+                # Publish a zero-velocity Twist message to stop the robot
                 stop_msg = Twist()
                 stop_msg.linear.x = self.vel_lin
                 stop_msg.angular.z = self.vel_ang
                 self._publisher.publish(stop_msg)
 
+            # Update blocking flags depending on where the obstacle is
             if danger_front:
                 self.obstacle_stop_front = True
 
             else:
                 self.obstacle_stop_back = True
 
+        # If no obstacle is detected, clear both blocking flags
         else:
             self.obstacle_stop_front, self.obstacle_stop_back = False, False
 
@@ -186,17 +230,17 @@ class NodeMapper(Node):
         """
         key = msg.key
 
+        # Allow backward motion only if there is no obstacle behind
         if not self.obstacle_stop_back and key == "s":
             self.process_key(key)
 
+        # Allow forward motion only if there is no obstacle in front
         elif not self.obstacle_stop_front and key == "w":
             self.process_key(key)
 
+        # Any other key (like turning) is always allowed
         elif key not in ["s", "w"]:
             self.process_key(key)
-
-
-        
 
 
     def process_key(self, key):
