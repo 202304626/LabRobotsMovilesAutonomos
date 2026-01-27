@@ -5,6 +5,3 @@ log/
 
 # Python
 __pycache__/
-
-# zips
-*.zip
