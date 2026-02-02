@@ -158,7 +158,14 @@ class WallFollowerNode(LifecycleNode):
 
         """
         # TODO: 2.11. Complete the function body with your code (i.e., replace the pass statement).
-        pass
+        
+        # We create a TwistStamped() messages and introduce the info of v and w
+        msg = TwistStamped()
+        msg.twist.linear.x = v
+        msg.twist.angular.z = w
+
+        # We publish the message through the commands publisher 
+        self._commands_publisher(msg=msg)
         
 
 def main(args=None):
