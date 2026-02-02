@@ -48,11 +48,12 @@ class TurtleBot3Burger(Robot):
 
         # We check if velocities are valid before sending them
         if (abs(left_angular_vel) <= self.WHEEL_SPEED_MAX and abs(right_angular_vel) <= self.WHEEL_SPEED_MAX):
-            self._sim.setJointTargetVelocity(self._motors["left"], left_angular_vel)
-            self._sim.setJointTargetVelocity(self._motors["right"], right_angular_vel)
 
-        else:
-            pass # we should send the last valid values, from the previous period of time
+            self._last_left_angular_vel = left_angular_vel
+            self._last_right_angular_vel = right_angular_vel
+
+        self._sim.setJointTargetVelocity(self._motors["left"],  self._last_left_angular_vel)
+        self._sim.setJointTargetVelocity(self._motors["right"], self._last_right_angular_vel)
 
     def sense(self) -> tuple[list[float], float, float]:
         """Read the LiDAR and the encoders.
@@ -106,14 +107,14 @@ class TurtleBot3Burger(Robot):
 
         # TODO: 2.2. Compute the derivatives of the angular positions to obtain velocities [rad/s].
 
-        # TODO: 2.3. Solve forward differential kinematics (i.e., calculate z_v and z_w).
-
         # The distance between the center of the robot and the wheel is track/2
         b = self._track / 2
 
         # We compute the vel of the wheels using the encoders (dividing by time dt )
         left_wheel_vel = encoders["left"] / self._dt
         right_wheel_vel = encoders["right"] / self._dt
+
+        # TODO: 2.3. Solve forward differential kinematics (i.e., calculate z_v and z_w).
 
         # We compute the angular and linear vels of the robot (direct diff)
         z_v = (self._wheel_radius/2) * (left_wheel_vel + right_wheel_vel)

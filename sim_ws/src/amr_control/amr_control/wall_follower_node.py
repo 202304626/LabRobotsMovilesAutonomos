@@ -61,7 +61,7 @@ class WallFollowerNode(LifecycleNode):
             self._commands_publisher = self.create_publisher(
                 msg_type=TwistStamped,
                 topic = "cmd_vel",
-                # qos_profile=10
+                qos_profile=10
             )
             
             # Subscribers
@@ -72,20 +72,20 @@ class WallFollowerNode(LifecycleNode):
 
             # We append the odometry suscriber
             self._subscribers.append(
-                self.create_subscription(
+                message_filters.Subscriber(
                     self,
                     msg_type = Odometry,
-                    topic_name = "odometry"
-                    # qos_profile =  # we may need: ros2 topic info odometry -v
+                    topic_name = "odometry",
+                    qos_profile = 10  # we may need: ros2 topic info odometry -v
                 )
             )
 
             # We append the laser scan suscriber
             self._subscribers.append(
-                self.create_subscription(
+                message_filters.Subscriber(
                     self,
                     msg_type = LaserScan,
-                    topic_name = "scan"
+                    topic_name = "scan",
                     qos_profile = qos_lidar_profile
                 )
             )
@@ -94,7 +94,7 @@ class WallFollowerNode(LifecycleNode):
             ts = message_filters.ApproximateTimeSynchronizer(
                 self._subscribers,
                 queue_size=10,  # number of messages of each topic we need to receive until we are "completed"
-                slop=9  # max delay in seconds to consider that 2 messages are able to be syncronized (we must change it, decreasing it)
+                slop=1  # max delay in seconds to consider that 2 messages are able to be syncronized (we must change it, decreasing it)
             )
 
             # We register the callback that we want to execute once the measurements are received
@@ -140,7 +140,7 @@ class WallFollowerNode(LifecycleNode):
             z_w: float = odom_msg.twist.twist.angular.z  # angular vel from the robot in z axis
             
             # TODO: 2.9. Parse LiDAR measurements from the LaserScan message (i.e., read z_scan).
-            z_scan: list[float] = scan_msg.ranges
+            z_scan: list[float] = list(scan_msg.ranges)
             
             # Execute wall follower
             v, w = self._wall_follower.compute_commands(z_scan, z_v, z_w)
@@ -161,6 +161,7 @@ class WallFollowerNode(LifecycleNode):
         
         # We create a TwistStamped() messages and introduce the info of v and w
         msg = TwistStamped()
+        msg.header.stamp = self.get_clock().now().to_msg()
         msg.twist.linear.x = v
         msg.twist.angular.z = w
 
