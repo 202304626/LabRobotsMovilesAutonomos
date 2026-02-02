@@ -15,6 +15,13 @@ from transforms3d.euler import quat2euler
 from amr_simulation.coppeliasim import CoppeliaSim
 from amr_simulation.robot_turtlebot3_burger import TurtleBot3Burger
 
+# LiDAR quality of service
+qos_lidar_profile = QoSProfile(
+    history=QoSHistoryPolicy.KEEP_LAST,
+    depth=10,
+    reliability=QoSReliabilityPolicy.BEST_EFFORT,
+    durability=QoSDurabilityPolicy.VOLATILE,
+)
 
 class CoppeliaSimNode(LifecycleNode):
     def __init__(self):
@@ -65,6 +72,19 @@ class CoppeliaSimNode(LifecycleNode):
 
             # Publishers
             # TODO: 2.4. Create the /odometry (Odometry message) and /scan (LaserScan) publishers.
+            odometry_publisher = self.create_publisher(
+                msg_type=Odometry,
+                topic = "odometry",
+                # qos_profile =  # we may need: ros2 topic info odometry -v
+            )
+
+            laserScan_publisher = self.create_publisher(
+                msg_type=LaserScan,
+                topic = "scan",
+                qos_profile=qos_lidar_profile
+            )
+
+
             
             # Subscribers
             # TODO: 2.12. Subscribe to /cmd_vel. Connect it with with _next_step_callback.

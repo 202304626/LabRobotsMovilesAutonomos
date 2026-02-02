@@ -12,6 +12,13 @@ import traceback
 
 from amr_control.wall_follower import WallFollower
 
+# LiDAR quality of service
+qos_lidar_profile = QoSProfile(
+    history=QoSHistoryPolicy.KEEP_LAST,
+    depth=10,
+    reliability=QoSReliabilityPolicy.BEST_EFFORT,
+    durability=QoSDurabilityPolicy.VOLATILE,
+)
 
 class WallFollowerNode(LifecycleNode):
     def __init__(self):
@@ -52,6 +59,40 @@ class WallFollowerNode(LifecycleNode):
             
             # Subscribers
             # TODO: 2.7. Synchronize _compute_commands_callback with /odometry and /scan.
+
+            # We define an empty list of suscribers
+            self._subscribers: list[ message_filters.Subscriber ] = []
+
+            # We append the odometry suscriber
+            self._subscribers.append(
+                self.create_subscription(
+                    self,
+                    msg_type = Odometry,
+                    topic_name = "odometry"
+                    # qos_profile =  # we may need: ros2 topic info odometry -v
+                )
+            )
+
+            # We append the laser scan suscriber
+            self._subscribers.append(
+                self.create_subscription(
+                    self,
+                    msg_type = LaserScan,
+                    topic_name = "scan"
+                    qos_profile = qos_lidar_profile
+                )
+            )
+
+            # We wait until we receive all the measurements, and then we invoke the callback
+            ts = message_filters.ApproximateTimeSynchronizer(
+                self._subscribers,
+                queue_size=10,  # number of messages of each topic we need to receive until we are "completed"
+                slop=9  # max delay in seconds to consider that 2 messages are able to be syncronized (we must change it, decreasing it)
+            )
+
+            # We register the callback that we want to execute once the measurements are received
+            ts.registerCallback(self._compute_commands_callback)
+
             # TODO: 4.12. Add /pose to the synced subscriptions only if localization is enabled.
             
         except Exception:
