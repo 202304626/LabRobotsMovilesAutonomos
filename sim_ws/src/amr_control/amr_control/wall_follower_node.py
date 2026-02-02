@@ -56,6 +56,13 @@ class WallFollowerNode(LifecycleNode):
 
             # Publishers
             # TODO: 2.10. Create the /cmd_vel velocity commands publisher (TwistStamped message).
+
+            # This publisher will be modified when we transfer the code to the physical robot
+            self._commands_publisher = self.create_publisher(
+                msg_type=TwistStamped,
+                topic = "cmd_vel",
+                # qos_profile=10
+            )
             
             # Subscribers
             # TODO: 2.7. Synchronize _compute_commands_callback with /odometry and /scan.
