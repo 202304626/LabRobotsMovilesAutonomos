@@ -38,7 +38,21 @@ class TurtleBot3Burger(Robot):
 
         """
         # TODO: 2.1. Complete the function body with your code (i.e., replace the pass statement).
-        pass
+        
+        # The distance between the center of the robot and the wheel is track/2
+        b = self._track / 2
+
+        # We compute the angular vel of the wheels: dot_X_R = v, dot_theta_R = w
+        left_angular_vel = (1/self._wheel_radius) * (v-b*w)
+        right_angular_vel = (1/self._wheel_radius) * (v+b*w)
+
+        # We check if velocities are valid before sending them
+        if (abs(left_angular_vel) <= self.WHEEL_SPEED_MAX and abs(right_angular_vel) <= self.WHEEL_SPEED_MAX):
+            self._sim.setJointTargetVelocity(self._motors["left"], left_angular_vel)
+            self._sim.setJointTargetVelocity(self._motors["right"], right_angular_vel)
+
+        else:
+            pass # we should send the last valid values, from the previous period of time
 
     def sense(self) -> tuple[list[float], float, float]:
         """Read the LiDAR and the encoders.
