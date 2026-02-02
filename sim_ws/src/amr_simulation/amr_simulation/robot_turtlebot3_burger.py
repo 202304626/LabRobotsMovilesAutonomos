@@ -42,7 +42,7 @@ class TurtleBot3Burger(Robot):
         # The distance between the center of the robot and the wheel is track/2
         b = self._track / 2
 
-        # We compute the angular vel of the wheels: dot_X_R = v, dot_theta_R = w
+        # We compute the angular vel of the wheels (inverse diff): dot_X_R = v, dot_theta_R = w
         left_angular_vel = (1/self._wheel_radius) * (v-b*w)
         right_angular_vel = (1/self._wheel_radius) * (v+b*w)
 
@@ -107,7 +107,16 @@ class TurtleBot3Burger(Robot):
         # TODO: 2.2. Compute the derivatives of the angular positions to obtain velocities [rad/s].
 
         # TODO: 2.3. Solve forward differential kinematics (i.e., calculate z_v and z_w).
-        z_v = 0.0
-        z_w = 0.0
+
+        # The distance between the center of the robot and the wheel is track/2
+        b = self._track / 2
+
+        # We compute the vel of the wheels using the encoders (dividing by time dt )
+        left_wheel_vel = encoders["left"] / self._dt
+        right_wheel_vel = encoders["right"] / self._dt
+
+        # We compute the angular and linear vels of the robot (direct diff)
+        z_v = (self._wheel_radius/2) * (left_wheel_vel + right_wheel_vel)
+        z_w = (self._wheel_radius/(2*b)) * (right_wheel_vel - left_wheel_vel)
 
         return z_v, z_w
