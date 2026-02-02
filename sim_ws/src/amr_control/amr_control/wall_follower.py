@@ -1,6 +1,7 @@
 import enum
 import random
 import numpy as np
+import math
  
 states = enum.Enum("states", "Front Turn_Right Turn_Left")
  
@@ -29,7 +30,7 @@ class WallFollower:
         self._logger = logger
         self._simulation: bool = simulation
  
-        self._front_distance_threshold = 0.25
+        self._front_distance_threshold = 0.2
  
         self._x_vel = 0.15
         self._w_vel = 0.0
@@ -45,7 +46,7 @@ class WallFollower:
         self._right_dist_error = 0
         self._left_dist_error = 0
         self._front_dist_error = 0
-        self.expected_turning_distance = self._front_distance_threshold  # * np.sqrt(2)
+        self.expected_turning_distance = self._front_distance_threshold * np.sqrt(2)
  
         self._right_dist_target = 0.2
         self._Kp_right = 3.0
@@ -71,21 +72,21 @@ class WallFollower:
         # FOR TOMORROW WATCH THE FORMULAS IN THE PDF
         # TODO: 2.14. Complete the function body with your code (i.e., compute v and w).
  
-        self._front_dist = min(list(z_scan[0:5]) + list(z_scan[-5:]))  # Front distance
+        self._front_dist = self._safe_min(list(z_scan[0:5]) + list(z_scan[-5:]))  # Front distance
  
-        self._right_dist = min(
+        self._right_dist = self._safe_min(
             z_scan[(3 * len(z_scan) // 4) - 5 : (3 * len(z_scan) // 4) + 5]
         )  # Right distance
  
-        self._left_dist = min(
+        self._left_dist = self._safe_min(
             z_scan[(1 * len(z_scan) // 4) - 5 : (1 * len(z_scan) // 4) + 5]
         )  # Left distance
  
-        try:
-            self._right_dist_error = self._right_dist_target - self._right_dist
+        # try:
+        self._right_dist_error = self._right_dist_target - self._right_dist
  
-        except Exception:
-            pass
+        # except Exception:
+        #     pass
  
         if self._state == states.Front:
             self._x_vel, self._w_vel = self._handle_front_move()
@@ -102,13 +103,6 @@ class WallFollower:
             if self._front_dist >= self.expected_turning_distance:
                 self._state = states.Front
  
-        # Everytime front distance
-        # self._x_vel = 0.15
-        # Controller for angular velocity
-        # self._w_vel = self._Kp_right * self._right_dist_error + self._Kd_right * (
-        #    (self._right_dist_error - self._last_right_error) / self._dt
-        # )
- 
         self._last_right_error = self._right_dist_error
         # self._last_front_dist = self._front_dist
         # self._last_left_dist = self._left_dist
@@ -122,7 +116,8 @@ class WallFollower:
  
         # Everytime front velocity
         x_vel = 0.15
-        # Controller for angular velocity
+
+        # Controller for angular velocity (PD controll)
         w_vel = self._Kp_right * self._right_dist_error + self._Kd_right * (
             (self._right_dist_error - self._last_right_error) / self._dt
         )
@@ -133,6 +128,7 @@ class WallFollower:
         diff = self._right_dist - self._left_dist  # Here maybe put a threshold
  
         if abs(diff) <= 0.05:
+            # We are at an intersection
             self._state = random.choice([states.Turn_Left, states.Turn_Right])
  
         elif diff <= 0:  # The wall is at the right
@@ -142,12 +138,18 @@ class WallFollower:
             self._state = states.Turn_Left
  
     def _handle_turn_right(self):
+
         # Just rotate condition and assign direction
         if self._state == states.Turn_Right:
             return 0.0, 0.5
  
     def _handle_turn_left(self):
+        # Just rotate condition and assign direction
         if self._state == states.Turn_Left:
             return 0.0, -0.5
-            self._w_vel = -0.5
+        
+    def _safe_min(self, values, default=8.0):
+        vals = [v for v in values if v is not None and not math.isinf(v) and not math.isnan(v)]
+        return min(vals) if vals else default
+
  

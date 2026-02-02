@@ -75,7 +75,7 @@ class CoppeliaSimNode(LifecycleNode):
             self._odometry_publisher = self.create_publisher(
                 msg_type=Odometry,
                 topic = "odometry",
-                qos_profile =  # we may need: ros2 topic info odometry -v
+                qos_profile = 10  # we may need: ros2 topic info odometry -v
             )
 
             self._laserScan_publisher = self.create_publisher(

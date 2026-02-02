@@ -74,8 +74,8 @@ class WallFollowerNode(LifecycleNode):
             self._subscribers.append(
                 message_filters.Subscriber(
                     self,
-                    msg_type = Odometry,
-                    topic_name = "odometry",
+                    Odometry,
+                    "odometry",
                     qos_profile = 10  # we may need: ros2 topic info odometry -v
                 )
             )
@@ -84,8 +84,8 @@ class WallFollowerNode(LifecycleNode):
             self._subscribers.append(
                 message_filters.Subscriber(
                     self,
-                    msg_type = LaserScan,
-                    topic_name = "scan",
+                    LaserScan,
+                    "scan",
                     qos_profile = qos_lidar_profile
                 )
             )
@@ -166,7 +166,7 @@ class WallFollowerNode(LifecycleNode):
         msg.twist.angular.z = w
 
         # We publish the message through the commands publisher 
-        self._commands_publisher(msg=msg)
+        self._commands_publisher.publish(msg)
         
 
 def main(args=None):
