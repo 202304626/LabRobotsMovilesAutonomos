@@ -127,11 +127,13 @@ class WallFollowerNode(LifecycleNode):
         """
         if not pose_msg.localized:
             # TODO: 2.8. Parse the odometry from the Odometry message (i.e., read z_v and z_w).
-            z_v: float = 0.0
-            z_w: float = 0.0
+
+            # We need to extract the info from the messages inside the message
+            z_v: float = odom_msg.twist.twist.linear.x  # linear vel from the robot in x axis
+            z_w: float = odom_msg.twist.twist.angular.z  # angular vel from the robot in z axis
             
             # TODO: 2.9. Parse LiDAR measurements from the LaserScan message (i.e., read z_scan).
-            z_scan: list[float] = []
+            z_scan: list[float] = scan_msg.ranges
             
             # Execute wall follower
             v, w = self._wall_follower.compute_commands(z_scan, z_v, z_w)
