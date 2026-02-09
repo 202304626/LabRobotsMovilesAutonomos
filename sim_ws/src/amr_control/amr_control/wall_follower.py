@@ -30,8 +30,8 @@ class WallFollower:
         self._logger = logger
         self._simulation: bool = simulation
  
-        self._front_distance_threshold = 0.23  # Distance threshold to obstacles in front [m]
-        self.expected_turning_distance = self._front_distance_threshold * np.sqrt(2) 
+        self._front_distance_threshold = 0.23  # Distance threshold to obstacles in front [m]   
+        self.expected_turning_distance = self._front_distance_threshold * np.sqrt(2) * 1.3    
  
         self._x_vel = 0.15
         self._w_vel = 0.0
