@@ -1,7 +1,6 @@
 import enum
 import random
 import numpy as np
-import math
  
 states = enum.Enum("states", "Front Turn_Right Turn_Left")
  
@@ -30,7 +29,8 @@ class WallFollower:
         self._logger = logger
         self._simulation: bool = simulation
  
-        self._front_distance_threshold = 0.2
+        self._front_distance_threshold = 0.20  # Distance threshold to obstacles in front [m]
+        self.expected_turning_distance = self._front_distance_threshold * np.sqrt(2)
  
         self._x_vel = 0.15
         self._w_vel = 0.0
@@ -46,11 +46,14 @@ class WallFollower:
         self._right_dist_error = 0
         self._left_dist_error = 0
         self._front_dist_error = 0
-        self.expected_turning_distance = self._front_distance_threshold * np.sqrt(2)
- 
         self._right_dist_target = 0.2
-        self._Kp_right = 3.0
-        self._Kd_right = 5.0
+ 
+        # Controller gains
+        self._Kp_right = 4
+        self._Kd_right = 5
+        self._Ki_right = 0
+ 
+        self._integral_right = 0.0
  
         self._state = states.Front
  
@@ -82,11 +85,14 @@ class WallFollower:
             z_scan[(1 * len(z_scan) // 4) - 5 : (1 * len(z_scan) // 4) + 5]
         )  # Left distance
  
-        # try:
-        self._right_dist_error = self._right_dist_target - self._right_dist
+        try:
+            self._right_dist_error = self._right_dist_target - self._right_dist
  
-        # except Exception:
-        #     pass
+            self._integral_right += self._right_dist_error * self._dt  # Sumation for integral term
+            self._integral_right = max(-10, self._safe_min(10, self._integral_right))  # Límites prácticos
+ 
+        except Exception:
+            pass
  
         if self._state == states.Front:
             self._x_vel, self._w_vel = self._handle_front_move()
@@ -95,17 +101,17 @@ class WallFollower:
             self._x_vel, self._w_vel = self._handle_turn_right()
  
             if self._front_dist >= self.expected_turning_distance:
+                self._integral_right = 0.0
                 self._state = states.Front
  
         elif self._state == states.Turn_Left:
             self._x_vel, self._w_vel = self._handle_turn_left()
  
             if self._front_dist >= self.expected_turning_distance:
+                self._integral_right = 0.0
                 self._state = states.Front
  
         self._last_right_error = self._right_dist_error
-        # self._last_front_dist = self._front_dist
-        # self._last_left_dist = self._left_dist
  
         return self._x_vel, self._w_vel
  
@@ -114,13 +120,14 @@ class WallFollower:
             self._handle_turn()
             return 0.0, 0.0
  
-        # Everytime front velocity
-        x_vel = 0.15
-
-        # Controller for angular velocity (PD controll)
+        # Controller for angular velocity
         w_vel = self._Kp_right * self._right_dist_error + self._Kd_right * (
             (self._right_dist_error - self._last_right_error) / self._dt
+            + (self._Ki_right * self._integral_right)
         )
+ 
+        # Everytime front velocity
+        x_vel = 0.15  # Maybe we can calculate how much we can put here, and make it faster
  
         return x_vel, w_vel
  
@@ -128,25 +135,28 @@ class WallFollower:
         diff = self._right_dist - self._left_dist  # Here maybe put a threshold
  
         if abs(diff) <= 0.05:
-            # We are at an intersection
             self._state = random.choice([states.Turn_Left, states.Turn_Right])
  
         elif diff <= 0:  # The wall is at the right
-            self._state = states.Turn_Right
- 
-        elif diff > 0:  # The wall is at the left
             self._state = states.Turn_Left
  
+        elif diff > 0:  # The wall is at the left
+            self._state = states.Turn_Right
+ 
     def _handle_turn_right(self):
-
         # Just rotate condition and assign direction
         if self._state == states.Turn_Right:
-            return 0.0, 0.5
+            return (
+                0.0,
+                -0.5,
+            )  # May we can see how much we can put here, like the max, and optimice time
  
     def _handle_turn_left(self):
-        # Just rotate condition and assign direction
         if self._state == states.Turn_Left:
-            return 0.0, -0.5
+            return (
+                0.0,
+                0.5,
+            )  # May we can see how much we can put here, like the max, and optimice time
         
     def _safe_min(self, values, default=8.0):
         vals = [v for v in values if v is not None and not math.isinf(v) and not math.isnan(v)]
