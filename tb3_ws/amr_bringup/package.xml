@@ -1,11 +1,14 @@
 <?xml version="1.0"?>
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
-  <name>amr_teleoperation</name>
-  <version>0.0.0</version>
-  <description>TODO: Package description</description>
-  <maintainer email="202304626@alu.comillas.edu">ros</maintainer>
-  <license>TODO: License declaration</license>
+  <name>amr_bringup</name>
+  <version>1.0.2</version>
+  <description>Launch scripts for Autonomous Mobile Robots @ Comillas ICAI.</description>
+  <maintainer email="jboal@comillas.edu">Jaime Boal</maintainer>
+  <license>Apache License 2.0</license>
+
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>lifecycle_msgs</exec_depend>
 
   <test_depend>ament_copyright</test_depend>
   <test_depend>ament_flake8</test_depend>
