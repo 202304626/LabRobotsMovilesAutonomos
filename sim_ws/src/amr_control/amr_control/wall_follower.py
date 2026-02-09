@@ -30,7 +30,7 @@ class WallFollower:
         self._logger = logger
         self._simulation: bool = simulation
  
-        self._front_distance_threshold = 0.22 - 0.05  # Distance threshold to obstacles in front [m]
+        self._front_distance_threshold = 0.23  # Distance threshold to obstacles in front [m]
         self.expected_turning_distance = self._front_distance_threshold * np.sqrt(2) 
  
         self._x_vel = 0.15
@@ -48,6 +48,7 @@ class WallFollower:
         self._left_dist_error = 0
         self._front_dist_error = 0
         self._wall_dist_target= 0.2
+        self._whole_path_width = 0.4
  
         # Controller gains
         self._Kp = 4
@@ -116,6 +117,15 @@ class WallFollower:
         return self._x_vel, self._w_vel
  
     def _handle_front_move(self):
+
+        if self._left_dist + self._right_dist >= self._whole_path_width:
+
+            if self._right_dist <= self._left_dist:
+                self._followed_wall = "right"
+
+            else:
+                self._followed_wall = "left"
+            
         if self._front_dist <= self._front_distance_threshold:
             self._handle_turn()
             return 0.0, 0.0
@@ -124,7 +134,7 @@ class WallFollower:
         w_vel = self.get_w_vel()
         
         # Everytime front velocity
-        x_vel = (self.LINEAR_SPEED_MAX-0.05) - abs(w_vel)*(self.TRACK/2)  # Maybe we can calculate how much we can put here, and make it faster
+        x_vel = (self.LINEAR_SPEED_MAX) - abs(w_vel)*(self.TRACK/2)  # Maybe we can calculate how much we can put here, and make it faster
  
         return x_vel, w_vel
  
@@ -183,7 +193,6 @@ class WallFollower:
             
         )
     
-
 
 
 
