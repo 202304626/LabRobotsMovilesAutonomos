@@ -127,7 +127,7 @@ class WallFollower:
         )
  
         # Everytime front velocity
-        x_vel = 0.15  # Maybe we can calculate how much we can put here, and make it faster
+        x_vel = self.LINEAR_SPEED_MAX - abs(w_vel)*(self.TRACK/2)  # Maybe we can calculate how much we can put here, and make it faster
  
         return x_vel, w_vel
  
@@ -161,5 +161,3 @@ class WallFollower:
     def _safe_min(self, values, default=8.0):
         vals = [v for v in values if v is not None and not math.isinf(v) and not math.isnan(v)]
         return min(vals) if vals else default
-
- 
