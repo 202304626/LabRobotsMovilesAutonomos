@@ -1,6 +1,7 @@
 import enum
 import random
 import numpy as np
+import math
  
 states = enum.Enum("states", "Front Turn_Right Turn_Left")
  
@@ -29,8 +30,8 @@ class WallFollower:
         self._logger = logger
         self._simulation: bool = simulation
  
-        self._front_distance_threshold = 0.20  # Distance threshold to obstacles in front [m]
-        self.expected_turning_distance = self._front_distance_threshold * np.sqrt(2)
+        self._front_distance_threshold = 0.22 - 0.05  # Distance threshold to obstacles in front [m]
+        self.expected_turning_distance = self._front_distance_threshold * np.sqrt(2) 
  
         self._x_vel = 0.15
         self._w_vel = 0.0
@@ -41,20 +42,19 @@ class WallFollower:
  
         self._last_right_error = 0
         # self._last_front_error = 0
-        # self._last_left_error = 0
+        self._last_left_error = 0
  
         self._right_dist_error = 0
         self._left_dist_error = 0
         self._front_dist_error = 0
-        self._right_dist_target = 0.2
+        self._wall_dist_target= 0.2
  
         # Controller gains
-        self._Kp_right = 4
-        self._Kd_right = 5
-        self._Ki_right = 0
- 
-        self._integral_right = 0.0
- 
+        self._Kp = 4
+        self._Kd = 5
+
+        self._followed_wall = "right"
+  
         self._state = states.Front
  
     def compute_commands(self, z_scan: list[float], z_v: float, z_w: float) -> tuple[float, float]:
@@ -86,13 +86,12 @@ class WallFollower:
         )  # Left distance
  
         try:
-            self._right_dist_error = self._right_dist_target - self._right_dist
- 
-            self._integral_right += self._right_dist_error * self._dt  # Sumation for integral term
-            self._integral_right = max(-10, self._safe_min(10, self._integral_right))  # Límites prácticos
- 
+            self._right_dist_error = self._wall_dist_target - self._right_dist
+            self._left_dist_error = - self._wall_dist_target + self._left_dist
+
         except Exception:
-            pass
+            self._right_dist_error = 0
+            self._left_dist_error = 0
  
         if self._state == states.Front:
             self._x_vel, self._w_vel = self._handle_front_move()
@@ -101,17 +100,18 @@ class WallFollower:
             self._x_vel, self._w_vel = self._handle_turn_right()
  
             if self._front_dist >= self.expected_turning_distance:
-                self._integral_right = 0.0
+
                 self._state = states.Front
  
         elif self._state == states.Turn_Left:
             self._x_vel, self._w_vel = self._handle_turn_left()
  
             if self._front_dist >= self.expected_turning_distance:
-                self._integral_right = 0.0
+                
                 self._state = states.Front
  
         self._last_right_error = self._right_dist_error
+        self._last_left_error = self._left_dist_error
  
         return self._x_vel, self._w_vel
  
@@ -121,17 +121,19 @@ class WallFollower:
             return 0.0, 0.0
  
         # Controller for angular velocity
-        w_vel = self._Kp_right * self._right_dist_error + self._Kd_right * (
-            (self._right_dist_error - self._last_right_error) / self._dt
-            + (self._Ki_right * self._integral_right)
-        )
- 
+        w_vel = self.get_w_vel()
+        
         # Everytime front velocity
-        x_vel = self.LINEAR_SPEED_MAX - abs(w_vel)*(self.TRACK/2)  # Maybe we can calculate how much we can put here, and make it faster
+        x_vel = (self.LINEAR_SPEED_MAX-0.05) - abs(w_vel)*(self.TRACK/2)  # Maybe we can calculate how much we can put here, and make it faster
  
         return x_vel, w_vel
  
     def _handle_turn(self):
+
+        # Reset error
+        self._right_dist_error = 0
+        self._left_dist_error = 0
+
         diff = self._right_dist - self._left_dist  # Here maybe put a threshold
  
         if abs(diff) <= 0.05:
@@ -139,9 +141,11 @@ class WallFollower:
  
         elif diff <= 0:  # The wall is at the right
             self._state = states.Turn_Left
+            self._followed_wall = "right"
  
         elif diff > 0:  # The wall is at the left
             self._state = states.Turn_Right
+            self._followed_wall = "left"
  
     def _handle_turn_right(self):
         # Just rotate condition and assign direction
@@ -161,3 +165,48 @@ class WallFollower:
     def _safe_min(self, values, default=8.0):
         vals = [v for v in values if v is not None and not math.isinf(v) and not math.isnan(v)]
         return min(vals) if vals else default
+
+
+    def get_w_vel(self):
+
+        if self._followed_wall == "right":
+            error, last_error = self._right_dist_error, self._last_right_error
+
+        elif self._followed_wall == "left":
+            error, last_error = self._left_dist_error, self._last_left_error
+
+        else: 
+            return 0.0
+
+        return self._Kp * error + self._Kd * (
+            (error - last_error) / self._dt
+            
+        )
+    
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
