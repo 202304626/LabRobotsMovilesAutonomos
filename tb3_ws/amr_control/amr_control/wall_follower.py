@@ -26,7 +26,7 @@ class WallFollower:
             simulation: True if running in simulation, False if running on the real robot.
  
         """
-        self._dt: float = dt
+        self._dt: float = dt 
         self._logger = logger
         self._simulation: bool = simulation 
  
