@@ -57,12 +57,21 @@ class WallFollowerNode(LifecycleNode):
             # Publishers
             # TODO: 2.10. Create the /cmd_vel velocity commands publisher (TwistStamped message).
 
-            # This publisher will be modified when we transfer the code to the physical robot
-            self._commands_publisher = self.create_publisher(
-                msg_type=TwistStamped,
-                topic = "cmd_vel",
-                qos_profile=10
-            )
+            if self._simulation:
+                # This publisher will be modified when we transfer the code to the physical robot
+                self._commands_publisher = self.create_publisher(
+                    msg_type=TwistStamped,
+                    topic = "cmd_vel",
+                    qos_profile=10
+                )
+
+            else:
+                self._commands_publisher = self.create_publisher(
+                    msg_type=Twist,
+                    topic = "cmd_vel",
+                    qos_profile=10
+                )
+
             
             # Subscribers
             # TODO: 2.7. Synchronize _compute_commands_callback with /odometry and /scan.
@@ -94,11 +103,24 @@ class WallFollowerNode(LifecycleNode):
             ts = message_filters.ApproximateTimeSynchronizer(
                 self._subscribers,
                 queue_size=10,  # number of messages of each topic we need to receive until we are "completed"
-                slop=1  # max delay in seconds to consider that 2 messages are able to be syncronized (we must change it, decreasing it)
+                slop=0.15 # max delay in seconds to consider that 2 messages are able to be syncronized
             )
 
-            # We register the callback that we want to execute once the measurements are received
-            ts.registerCallback(self._compute_commands_callback)
+            # We register the callback depending on simulation/real robot behavior
+            if not self._simulation:
+                # Store latest sensor data
+                self._latest_odom_msg = None
+                self._latest_scan_msg = None
+                self._latest_pose_msg = PoseStamped()
+
+                # Change sync callback to just store data
+                ts.registerCallback(self._store_measurements_callback)
+
+                # Timer to run control at dt rate
+                self._timer = self.create_timer(dt, self._timer_callback)
+            else:
+                ts.registerCallback(self._compute_commands_callback)
+
 
             # TODO: 4.12. Add /pose to the synced subscriptions only if localization is enabled.
             
@@ -107,6 +129,20 @@ class WallFollowerNode(LifecycleNode):
             return TransitionCallbackReturn.ERROR
 
         return super().on_configure(state)
+    
+
+    def _store_measurements_callback(self, odom_msg: Odometry, scan_msg: LaserScan, pose_msg: PoseStamped = PoseStamped()):
+        """Stores the latest sensor measurements."""
+        self._latest_odom_msg = odom_msg
+        self._latest_scan_msg = scan_msg
+        self._latest_pose_msg = pose_msg
+
+    def _timer_callback(self):
+        """Timer callback for real robot. Runs control with latest measurements."""
+        if self._latest_odom_msg is not None and self._latest_scan_msg is not None:
+            self._compute_commands_callback(
+                self._latest_odom_msg, self._latest_scan_msg, self._latest_pose_msg
+            )
 
     def on_activate(self, state: LifecycleState) -> TransitionCallbackReturn:
         """Handles an activating transition.
@@ -158,16 +194,28 @@ class WallFollowerNode(LifecycleNode):
 
         """
         # TODO: 2.11. Complete the function body with your code (i.e., replace the pass statement).
-        
-        # We create a TwistStamped() messages and introduce the info of v and w
-        msg = TwistStamped()
-        msg.header.stamp = self.get_clock().now().to_msg()
-        msg.twist.linear.x = v
-        msg.twist.angular.z = w
 
-        # We publish the message through the commands publisher 
-        self._commands_publisher.publish(msg)
-        
+        if self._simulation:
+
+            # We create a TwistStamped() messages and introduce the info of v and w
+            msg = TwistStamped()
+            msg.header.stamp = self.get_clock().now().to_msg()
+            msg.twist.linear.x = v
+            msg.twist.angular.z = w
+
+            # We publish the message through the commands publisher 
+            self._commands_publisher.publish(msg)
+
+        else:
+            
+            # We create a Twist() messages and introduce the info of v and w
+            msg = Twist()
+            msg.linear.x = v
+            msg.angular.z = -w  # Positive sign in clockwise 
+
+            # We publish the message through the commands publisher 
+            self._commands_publisher.publish(msg)
+           
 
 def main(args=None):
     rclpy.init(args=args)

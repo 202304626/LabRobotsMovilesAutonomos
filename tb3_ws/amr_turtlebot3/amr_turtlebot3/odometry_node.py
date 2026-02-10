@@ -20,7 +20,8 @@ class OdometryPubSub(Node):
 
         self._odometry_subscriber = self.create_subscription(Odometry,"odom",self.add_vel_odometry,10)
 
-    def add_vel_odometry(self,msg):
+    def add_vel_odometry(self, msg):
+        
         # Extract position
         x = msg.pose.pose.position.x
         y = msg.pose.pose.position.y
@@ -46,8 +47,7 @@ class OdometryPubSub(Node):
                 dx = x - self._prev_x
                 dy = y - self._prev_y
 
-                # Project displacement onto the robot heading
-                # (average heading)
+                # Project displacement from global onto the robot heading
                 avg_theta = (self._prev_theta + theta) / 2.0
                 v = (
                     dx * math.cos(avg_theta)
@@ -65,12 +65,16 @@ class OdometryPubSub(Node):
                 msg.twist.twist.linear.x = v
                 msg.twist.twist.linear.y = 0.0
                 msg.twist.twist.linear.z = 0.0
+
                 msg.twist.twist.angular.x = 0.0
                 msg.twist.twist.angular.y = 0.0
                 msg.twist.twist.angular.z = w
 
                 # Publish on /odometry
                 self._odom_publisher.publish(msg)
+
+                self.get_logger().info('I publish v linear: "%s"' % msg.twist.twist.linear.x)
+                self.get_logger().info('I publish w angular: "%s"' % msg.twist.twist.angular.z)
 
         # Store for next iteration
         self._prev_x = x
@@ -79,8 +83,7 @@ class OdometryPubSub(Node):
         self._prev_time = t
 
         
-        
-        # self.get_logger().info('I heard: "%s"' % msg.twist.twist.linear.x)
+
 
 def main(args=None):
     rclpy.init(args=args)
@@ -90,8 +93,6 @@ def main(args=None):
     rclpy.spin(odometry_pub_sub)
 
     # Destroy the node explicitly
-    # (optional - otherwise it will be done automatically
-    # when the garbage collector destroys the node object)
     odometry_pub_sub.destroy_node()
     rclpy.shutdown()
 

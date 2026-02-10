@@ -1,0 +1,17 @@
+{
+    "ROS2.distro": "humble",
+    "python.autoComplete.extraPaths": [
+        "/home/turtlebot/tb3_ws/build/amr_teleoperation",
+        "/workspaces/LabRobotsMovilesAutonomos/tb3_ws/install/amr_teleoperation/lib/python3.10/site-packages",
+        "/workspaces/LabRobotsMovilesAutonomos/tb3_ws/install/amr_msgs/local/lib/python3.10/dist-packages",
+        "/opt/ros/humble/lib/python3.10/site-packages",
+        "/opt/ros/humble/local/lib/python3.10/dist-packages"
+    ],
+    "python.analysis.extraPaths": [
+        "/home/turtlebot/tb3_ws/build/amr_teleoperation",
+        "/workspaces/LabRobotsMovilesAutonomos/tb3_ws/install/amr_teleoperation/lib/python3.10/site-packages",
+        "/workspaces/LabRobotsMovilesAutonomos/tb3_ws/install/amr_msgs/local/lib/python3.10/dist-packages",
+        "/opt/ros/humble/lib/python3.10/site-packages",
+        "/opt/ros/humble/local/lib/python3.10/dist-packages"
+    ]
+}

@@ -73,7 +73,6 @@ class WallFollower:
  
         """
  
-        # FOR TOMORROW WATCH THE FORMULAS IN THE PDF
         # TODO: 2.14. Complete the function body with your code (i.e., compute v and w).
  
         self._front_dist = self._safe_min(list(z_scan[0:5]) + list(z_scan[-5:]))  # Front distance
@@ -133,7 +132,7 @@ class WallFollower:
         # Controller for angular velocity
         w_vel = self.get_w_vel()
         
-        # Everytime front velocity
+        # Everytime front velocity (try to reach the max if posible)
         x_vel = (self.LINEAR_SPEED_MAX) - abs(w_vel)*(self.TRACK/2)  # Maybe we can calculate how much we can put here, and make it faster
  
         return x_vel, w_vel
