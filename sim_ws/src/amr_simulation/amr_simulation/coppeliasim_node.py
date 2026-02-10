@@ -253,6 +253,7 @@ class CoppeliaSimNode(LifecycleNode):
         """
         # TODO: 2.5. Complete the function body with your code (i.e., replace the pass statement).
         msg = Odometry()
+        msg.header.stamp = self.get_clock().now().to_msg()
         msg.twist.twist.linear.x = z_v
         msg.twist.twist.angular.z = z_w
 
