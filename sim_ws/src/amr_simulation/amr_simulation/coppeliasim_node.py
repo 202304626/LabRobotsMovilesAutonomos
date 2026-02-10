@@ -268,10 +268,14 @@ class CoppeliaSimNode(LifecycleNode):
         # TODO: 2.6. Complete the function body with your code (i.e., replace the pass statement).
         
         msg = LaserScan()
+        
+        msg.header.stamp = self.get_clock().now().to_msg()
+        msg.angle_min = 0.0
+        msg.angle_max = 2.0 * math.pi
+        msg.angle_increment = 2.0 * math.pi / len(z_scan)
         msg.ranges = z_scan
-
+    
         self._laserScan_publisher.publish(msg=msg)
-        # add header, angle_min, angle_max and angle_increment 
         
 
 def main(args=None):
