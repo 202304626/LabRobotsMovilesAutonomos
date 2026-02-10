@@ -5,4 +5,8 @@ log/
 
 # Python
 __pycache__/
-
+.vscode/
+**/.vscode/
+**/browse.vc.db
+**/*.vc.db
+**/ipch/
