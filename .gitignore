@@ -10,3 +10,4 @@ __pycache__/
 **/browse.vc.db
 **/*.vc.db
 **/ipch/
+"*.vc.db" 
