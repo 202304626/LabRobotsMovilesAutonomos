@@ -73,18 +73,16 @@ class WallFollower:
  
         """
  
-        # FOR TOMORROW WATCH THE FORMULAS IN THE PDF
         # TODO: 2.14. Complete the function body with your code (i.e., compute v and w).
  
-        self._front_dist = self._safe_min(list(z_scan[0:5]) + list(z_scan[-5:]))  # Front distance
+        # Front distance: rays 0-5 and last 5 rays (front of the robot)
+        self._front_dist = self._safe_min(list(z_scan[0:5]) + list(z_scan[-5:])) 
  
-        self._right_dist = self._safe_min(
-            z_scan[(3 * len(z_scan) // 4) - 5 : (3 * len(z_scan) // 4) + 5]
-        )  # Right distance
+        # Right distance: rays around 3/4 of the array (right side)
+        self._right_dist = self._safe_min(z_scan[(3 * len(z_scan) // 4) - 5 : (3 * len(z_scan) // 4) + 5])  
  
-        self._left_dist = self._safe_min(
-            z_scan[(1 * len(z_scan) // 4) - 5 : (1 * len(z_scan) // 4) + 5]
-        )  # Left distance
+        # Left distance: rays around 1/4 of the array (left side)
+        self._left_dist = self._safe_min(z_scan[(1 * len(z_scan) // 4) - 5 : (1 * len(z_scan) // 4) + 5])
  
         try:
             self._right_dist_error = self._wall_dist_target - self._right_dist
@@ -193,8 +191,6 @@ class WallFollower:
             
         )
     
-
-
 
 
 
