@@ -1,13 +1,11 @@
 from launch import LaunchDescription
 from launch_ros.actions import LifecycleNode, Node
-
 import math
 
 
 def generate_launch_description():
-    simulation = False
+    simulation = False  # boolean to switch from sim to physical robot
     dt = 0.05  # sampling period
-
     # start = (1.0, -1.0, 0.5 * math.pi)  # Outer corridor
     # start = (0.6, -0.6, 1.5 * math.pi)  # Inner corridor
 
@@ -30,26 +28,21 @@ def generate_launch_description():
             {
                 "node_startup_order": (
                     "wall_follower",
-                    # "coppeliasim",  # Must be started last
                 )
             }
         ],
     )
 
-    # Add the new node to the launch file (5.1)  TO DO
     odometry_node = Node(
         package="amr_turtlebot3",
         executable="odometry_node",
         output="screen",
-        # arguments=[],
-        # parameters=[]
         
     )
 
     return LaunchDescription(
         [
             wall_follower_node,
-            #coppeliasim_node,
             odometry_node,
             lifecycle_manager_node,  # Must be launched last
         ])

@@ -4,7 +4,7 @@ import numpy as np
 import math
 import time
 
- 
+# States: added Fixed_Front for real robot
 states = enum.Enum("states", "Front Turn_Right Turn_Left Fixed_Front" )
  
  
@@ -32,9 +32,9 @@ class WallFollower:
         self._logger = logger
         self._simulation: bool = simulation 
  
-        self._front_distance_threshold = 0.28 #0.22  # Distance threshold to obstacles in front [m]
-        self.expected_turning_distance = self._front_distance_threshold * np.sqrt(2) * 1.3 # 1.3
-        self.expected_turning_distance_upper = 0.65 + 0.1
+        self._front_distance_threshold = 0.28  # Distance threshold to obstacles in front [m]
+        self.expected_turning_distance = self._front_distance_threshold * np.sqrt(2) * 1.3 # Distance threshold to stop turning
+        self.expected_turning_distance_upper = 0.75 
 
         self._x_vel = 0.15
         self._w_vel = 0.0
@@ -46,7 +46,6 @@ class WallFollower:
         self._fixed_time = 0
  
         self._last_right_error = 0
-        # self._last_front_error = 0
         self._last_left_error = 0
  
         self._right_dist_error = 0
@@ -56,12 +55,12 @@ class WallFollower:
         self._whole_path_width = 0.4
  
         # Controller gains
-        self._Kp = 7.6 # 7.8
+        self._Kp = 7.6 
         self._Kd = 6
 
-        self._followed_wall = "right"
+        self._followed_wall = "right"  # We start with this default value
   
-        self._state = states.Front
+        self._state = states.Front  # We start with this default state
  
     def compute_commands(self, z_scan: list[float], z_v: float, z_w: float) -> tuple[float, float]:
         """Wall following exploration algorithm.
@@ -79,23 +78,12 @@ class WallFollower:
         """
  
         # TODO: 2.14. Complete the function body with your code (i.e., compute v and w).
-        self._logger.info(f"************************** nº NANS: {sum(isinstance(v, float) and math.isnan(v) for v in z_scan)}")
+        self._logger.info(f"************************** Nº NANS: {sum(isinstance(v, float) and math.isnan(v) for v in z_scan)}")
  
-        self._front_dist = z_scan[-1] # self._safe_min(z_scan[-5:]+z_scan[:5])  # Front distance
- 
-        # self._right_dist = self._safe_min(
-        #     z_scan[(3 * len(z_scan) // 4) - 5 : (3 * len(z_scan) // 4) + 5]
-        # ) # Right distance
-        # self._right_dist = self._safe_min([z_scan[3 * len(z_scan) // 4]])
-        self._right_dist = z_scan[3 * len(z_scan) // 4]
-        
-        # self._left_dist = self._safe_min([z_scan[len(z_scan) // 4]])
-        self._left_dist = z_scan[len(z_scan) // 4]
+        self._front_dist = z_scan[-1] # Front distance
+        self._right_dist = z_scan[3 * len(z_scan) // 4] # Right distance
+        self._left_dist = z_scan[len(z_scan) // 4] # Left distance
 
-        # self._left_dist = self._safe_min(
-        #     z_scan[(1 * len(z_scan) // 4) - 5 : (1 * len(z_scan) // 4) + 5]
-        # )  # """# Left distance
- 
         try:
             self._right_dist_error = self._wall_dist_target - self._right_dist
             self._left_dist_error = - self._wall_dist_target + self._left_dist
@@ -111,20 +99,20 @@ class WallFollower:
             self._x_vel, self._w_vel = self._handle_turn_right()
  
             if self._front_dist >= self.expected_turning_distance and self._front_dist <= self.expected_turning_distance_upper:
-                #print(f"state: {self._state}", flush=True)
+                # print(f"state: {self._state}", flush=True)
                 self._fixed_time = time.perf_counter()
                 self._state = states.Fixed_Front
-                self._logger.info(f"{self._front_dist}")
+                self._logger.info(f"Front distance: {self._front_dist}")
                 self._logger.info(f"state: {self._state}\n")
  
         elif self._state == states.Turn_Left:
             self._x_vel, self._w_vel = self._handle_turn_left()
  
             if self._front_dist >= self.expected_turning_distance and self._front_dist <= self.expected_turning_distance_upper:
-                #print(f"state: {self._state}", flush=True)
+                # print(f"state: {self._state}", flush=True)
                 self._fixed_time = time.perf_counter()                
                 self._state = states.Fixed_Front
-                self._logger.info(f"{self._front_dist}")
+                self._logger.info(f"Front distance: {self._front_dist}")
                 self._logger.info(f"state: {self._state}\n")
  
 
@@ -132,12 +120,11 @@ class WallFollower:
             self._x_vel, self._w_vel = self._handle_fixed_front()
 
             if (time.perf_counter() - self._fixed_time) > 0.35:
-                #print(f"state: {self._state}", flush=True)
+                # print(f"state: {self._state}", flush=True)
                 self._state = states.Front
-                self._logger.info(f"{self._front_dist}")
+                self._logger.info(f"Front distance: {self._front_dist}")
                 self._logger.info(f"state: {self._state}\n")
 
- 
         self._last_right_error = self._right_dist_error
         self._last_left_error = self._left_dist_error
  
@@ -155,8 +142,8 @@ class WallFollower:
             
         if self._front_dist <= self._front_distance_threshold:
             self._handle_turn()
-            self._logger.info(f"right. {z_scan[(3 * len(z_scan) // 4) - 5 : (3 * len(z_scan) // 4) + 5]}")  # SCAN TO DEBUG
-            self._logger.info(f"left. {z_scan[(1 * len(z_scan) // 4) - 5 : (1 * len(z_scan) // 4) + 5]}")  # SCAN TO DEBUG
+            # self._logger.info(f"right. {z_scan[(3 * len(z_scan) // 4) - 5 : (3 * len(z_scan) // 4) + 5]}")  # SCAN TO DEBUG
+            # self._logger.info(f"left. {z_scan[(1 * len(z_scan) // 4) - 5 : (1 * len(z_scan) // 4) + 5]}")  # SCAN TO DEBUG
             return 0.0, 0.0
  
         # Controller for angular velocity
@@ -164,20 +151,20 @@ class WallFollower:
         
         # Everytime front velocity (try to reach the max if posible)
         # x_vel = (self.LINEAR_SPEED_MAX) - abs(w_vel)*(self.TRACK/2)  # Maybe we can calculate how much we can put here, and make it faster
-        x_vel = 0.1
+        x_vel = 0.1  # We start with a low vel, and will increase it while we improve our control
         return x_vel, w_vel
  
     def _handle_turn(self):
 
-        # Reset error
+        # Reset error when start turning
         self._right_dist_error = 0
         self._left_dist_error = 0
 
-        diff = self._right_dist - self._left_dist  # Here maybe put a threshold
+        diff = self._right_dist - self._left_dist 
  
         if abs(diff) <= 0.05:
-            self._state = random.choice([states.Turn_Left, states.Turn_Right])
-            self._logger.info(f"Intersección")
+            self._state = random.choice([states.Turn_Left, states.Turn_Right])  # To add randomness
+            self._logger.info(f"Intersection reached...")
  
         elif diff <= 0:  # The wall is at the right
             self._state = states.Turn_Left
@@ -188,13 +175,13 @@ class WallFollower:
             self._state = states.Turn_Right
             self._followed_wall = "left"
         
-        self._logger.info(f"Izquierda: {self._left_dist}")
-        self._logger.info(f"Derecha: {self._right_dist}")
-        self._logger.info(f"Frontal: {self._front_dist}")
-        self._logger.info(f"Diferencia: {diff}")
+        self._logger.info(f"Left: {self._left_dist}")
+        self._logger.info(f"Right: {self._right_dist}")
+        self._logger.info(f"Front: {self._front_dist}")
+        self._logger.info(f"Diff: {diff}")
         self._logger.info(f">>>>>>>>>>>>> STATE: {self._state}\n")
             
- 
+
     def _handle_turn_right(self):
         # Just rotate condition and assign direction
         if self._state == states.Turn_Right:
@@ -214,29 +201,26 @@ class WallFollower:
         vals = []
         for v in values:
             if v is not None and not math.isinf(v) and not math.isnan(v):
-                # self._logger.info(f"Valor en rango: {v}" )
+                # self._logger.info(f"In range value: {v}" )
                 vals.append(v)
             else:
                 vals.append(default)
-                self._logger.info(f"Valor fuera de rango: {v}")
+                self._logger.info(f"Value out of range: {v}")
 
         return min(vals) if vals else default
 
 
     def _safe_min2(self, values, default=None):
-        # Default correcto (evita el bug de SENSOR_RANGE_MAX fuera de scope)
         if default is None:
             default = self.SENSOR_RANGE_MAX
 
-        # Reordenar values: 0, 1, -1, 2, -2, ...
-        # (interpretamos values[0] como "0" de esta ventana)
         if values:
             ordered = [values[0]]
             for k in range(1, len(values)):
                 if k < len(values):
-                    ordered.append(values[k])       # +k
+                    ordered.append(values[k])       
                 if k < len(values):
-                    ordered.append(values[-k])      # -k
+                    ordered.append(values[-k])      
                 if len(ordered) >= len(values):
                     break
             values = ordered[:len(values)]
@@ -248,7 +232,7 @@ class WallFollower:
             else:
                 vals.append(default)
                 if self._logger:
-                    self._logger.info(f"Valor fuera de rango: {v}")
+                    self._logger.info(f"Value out of range: {v}")
 
         return min(vals) if vals else default
 
@@ -265,18 +249,17 @@ class WallFollower:
             return 0.0
 
         value = self._Kp * error + self._Kd * (
-            (error - last_error) / self._dt
-            
+            (error - last_error) / self._dt  
         )
 
         if value < 0:
             w = max(value, -0.34)
-            self._logger.info(f"Valor de W: {w}")
+            self._logger.info(f"Value of W: {w}")
             return w
 
         else:
             w = min(value, 0.34)
-            self._logger.info(f"Valor de W: {w}")
+            self._logger.info(f"Value of W: {w}")
             return w
 
     def _handle_fixed_front(self):
