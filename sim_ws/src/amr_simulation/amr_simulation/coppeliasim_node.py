@@ -89,11 +89,10 @@ class CoppeliaSimNode(LifecycleNode):
 
                 # TODO: 2.12. Subscribe to /cmd_vel. Connect it with with _next_step_callback.
                 self._cmd_vel_suscriber = self.create_subscription(
-                    msg_type=TwistStamped,
-                    topic="cmd_vel",
-                    callback=self._next_step_callback,
-                    qos_profile=10
-                )
+                    TwistStamped,
+                    "cmd_vel",
+                    self._next_step_callback,
+                    10)
 
             
             # TODO: 3.3. Sync the /pose and /cmd_vel subscribers if enable_localization is True.
@@ -108,7 +107,7 @@ class CoppeliaSimNode(LifecycleNode):
                         self,
                         TwistStamped,
                         "cmd_vel",
-                        10
+                        qos_profile = QoSProfile(depth=10)
                     )
                 )
 
@@ -118,7 +117,7 @@ class CoppeliaSimNode(LifecycleNode):
                         self,
                         PoseStamped,
                         "pose",
-                        10
+                        qos_profile = QoSProfile(depth=10)
                     )
                 )
 

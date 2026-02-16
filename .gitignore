@@ -11,3 +11,6 @@ __pycache__/
 **/*.vc.db
 **/ipch/
 "*.vc.db" 
+
+# images
+/images
