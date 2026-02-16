@@ -13,4 +13,4 @@ __pycache__/
 "*.vc.db" 
 
 # images
-/images
+*.png
