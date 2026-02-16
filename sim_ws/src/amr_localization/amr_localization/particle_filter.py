@@ -88,7 +88,7 @@ class ParticleFilter:
         # TODO: 3.10. Complete the missing function body with your code.
         localized: bool = False
         pose: tuple[float, float, float] = (float("inf"), float("inf"), float("inf"))
-        
+
         return localized, pose
 
     def move(self, v: float, w: float) -> None:
@@ -105,25 +105,24 @@ class ParticleFilter:
         # We assume that v and w are measured with respect of the robot
 
         for particle in self._particles:
-
             # Extract the components of this particle, to update them
-            x_o,y_o,theta_o = particle
+            x_o, y_o, theta_o = particle
 
             # Generate noise
-            noise_v = np.random.normal(loc = 0, scale = self._sigma_v )
-            noise_w = np.random.normal(loc = 0, scale = self._sigma_w)
+            noise_v = np.random.normal(loc=0, scale=self._sigma_v)
+            noise_w = np.random.normal(loc=0, scale=self._sigma_w)
 
             # Proyect the velocities to the x,y axis (global world axis)
-            x_vel = np.cos(theta_o)*v
-            y_vel = np.sin(theta_o)*v
+            x_vel = np.cos(theta_o) * v
+            y_vel = np.sin(theta_o) * v
 
             # Update x,y,theta with noise
-            particle[0] += (x_vel+noise_v)*self._dt
-            particle[1] += (y_vel+noise_v)*self._dt 
-            particle[2] += (w+noise_w)*self._dt
+            particle[0] += (x_vel + noise_v) * self._dt
+            particle[1] += (y_vel + noise_v) * self._dt
+            particle[2] += (w + noise_w) * self._dt
 
             # Normalize to make sure that the angle is in range [0, 2*pi]
-            particle[2] %= 2*np.pi 
+            particle[2] %= 2 * np.pi
 
             # Compute the intersection with the walls
             colission_segment = [(particle[0], particle[1]), (x_o, y_o)]
@@ -134,7 +133,6 @@ class ParticleFilter:
                 particle[0] = colissions[0]
                 particle[1] = colissions[1]
 
-
     def resample(self, measurements: list[float]) -> None:
         """Samples a new set of particles.
 
@@ -142,27 +140,26 @@ class ParticleFilter:
             measurements: Sensor measurements [m].
 
         """
-        probabilities = [self._measurement_probability(measurements, particle) for particle in self._particles]
+        probabilities = [
+            self._measurement_probability(measurements, particle) for particle in self._particles
+        ]
+        # dont forget that this is a likehood sum so we have to normalize in order to compare correctly
+        total = sum(probabilities)
+        probabilities = probabilities / total
         n = len(probabilities)
-        rand_numbers = np.random.uniform(0, 1/n) + np.arange(n)/n # array of stratas 
+        rand_numbers = np.random.uniform(0, 1 / n) + np.arange(n) / n  # array of stratas
         # we sum the weights in order to apply the  stratific samples
         weight_circle = np.cumsum(probabilities)
         # we hoose the largest weight whose cumulative value does not exceed the strat.
-        weight_distances = weight_circle - rand_numbers.reshape(n,1)
+        weight_distances = weight_circle - rand_numbers.reshape(n, 1)
         positive_weight_distances = np.where(weight_distances < 0, 1, weight_distances)
-        
+
         prominent_weights = np.argmin(positive_weight_distances, axis=1)
-        
-        self._particles  = self._particles[prominent_weights]
 
-
-        
-
-
-
+        self._particles = self._particles[prominent_weights]
 
         # TODO: 3.9. Complete the function body with your code (i.e., replace the pass statement).
-        
+
     def plot(self, axes, orientation: bool = True):
         """Draws particles.
 
@@ -271,16 +268,14 @@ class ParticleFilter:
         x_o_std, y_o_std, theta_o_std = initial_pose_sigma
 
         for i in range(particle_count):
-            
             valid = False
 
             while not valid:
-
                 if global_localization:  # First localization mode
                     # We create the particle in the bounds of the map using a uniform distribution
                     particle_x = np.random.uniform(low=x_min, high=x_max)
                     particle_y = np.random.uniform(low=y_min, high=y_max)
-                    orientation = np.random.choice([0, np.pi/2, np.pi, 3*np.pi/2])
+                    orientation = np.random.choice([0, np.pi / 2, np.pi, 3 * np.pi / 2])
 
                 else:  # Pose tracking mode
                     # We create the particle near to its position using a normal distribution
@@ -289,12 +284,16 @@ class ParticleFilter:
                     orientation = np.random.normal(loc=theta_o, scale=theta_o_std)
 
                 # If it is in an invalid place, we generate it again
-                if self._map.contains((particle_x, particle_y)):  # If the particle is valid, we store it
-                    particles[i] = [particle_x, 
-                                    particle_y, 
-                                    orientation % (2 * math.pi)]  # To normalize and just have values in range [0, 2*pi] 
+                if self._map.contains(
+                    (particle_x, particle_y)
+                ):  # If the particle is valid, we store it
+                    particles[i] = [
+                        particle_x,
+                        particle_y,
+                        orientation % (2 * math.pi),
+                    ]  # To normalize and just have values in range [0, 2*pi]
                     valid = True
-        
+
         return particles
 
     def _sense(self, pose: tuple[float, float, float]) -> list[float]:
@@ -306,13 +305,15 @@ class ParticleFilter:
         Returns: List of predicted measurements; nan if a sensor is out of range.
 
         """
-        
+
         # TODO: 3.6. Complete the missing function body with your code.
-        rays = range(0, 240, 240//8)
+        rays = range(0, 240, 240 // 8)
 
         measured_points = self._lidar_rays(pose=pose, indices=rays)
 
-        z_hat: list[float] = [self._map.check_collision(segment=pair)[1] for pair in measured_points]
+        z_hat: list[float] = [
+            self._map.check_collision(segment=pair)[1] for pair in measured_points
+        ]
 
         return z_hat
 
@@ -331,7 +332,7 @@ class ParticleFilter:
         """
         # TODO: 3.7. Complete the function body (i.e., replace the code below).
         return norm.pdf(x, mu, sigma)
-        
+
     def _lidar_rays(
         self, pose: tuple[float, float, float], indices: tuple[float], degree_increment: float = 1.5
     ) -> list[list[tuple[float, float]]]:
@@ -383,14 +384,18 @@ class ParticleFilter:
         """
 
         # TODO: 3.8. Complete the missing function body with your code.
-        
+
         probability = 1.0
 
         predicted_measurements = self._sense(pose=particle)
-
-        for measurement, predicted_measurement in zip(measurements, predicted_measurements):
-
+        rays = range(0, 240, 240 // 8)
+        subsampled_measurements = [measurements[i] for i in rays]
+        for measurement, predicted_measurement in zip(
+            subsampled_measurements, predicted_measurements
+        ):
             if not np.isnan(measurement) and not np.isnan(predicted_measurement):
-                probability *= self._gaussian(mu=measurement, sigma=self._sigma_z, x=predicted_measurements)
-        
+                probability *= self._gaussian(
+                    mu=measurement, sigma=self._sigma_z, x=predicted_measurement
+                )
+
         return probability
