@@ -142,8 +142,26 @@ class ParticleFilter:
             measurements: Sensor measurements [m].
 
         """
+        probabilities = [self._measurement_probability(measurements, particle) for particle in self._particles]
+        n = len(probabilities)
+        rand_numbers = np.random.uniform(0, 1/n) + np.arange(n)/n # array of stratas 
+        # we sum the weights in order to apply the  stratific samples
+        weight_circle = np.cumsum(probabilities)
+        # we hoose the largest weight whose cumulative value does not exceed the strat.
+        weight_distances = weight_circle - rand_numbers.reshape(n,1)
+        positive_weight_distances = np.where(weight_distances < 0, 1, weight_distances)
+        
+        prominent_weights = np.argmin(positive_weight_distances, axis=1)
+        
+        self._particles  = self._particles[prominent_weights]
+
+
+        
+
+
+
+
         # TODO: 3.9. Complete the function body with your code (i.e., replace the pass statement).
-        pass
         
     def plot(self, axes, orientation: bool = True):
         """Draws particles.
