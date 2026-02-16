@@ -212,6 +212,39 @@ class ParticleFilter:
         particles = np.empty((particle_count, 3), dtype=object)
 
         # TODO: 3.4. Complete the missing function body with your code.
+
+        # Extract the bounds of the map
+        x_min, y_min, x_max, y_max = self._map.bounds()
+
+        # Extract the values needed to create particles
+        x_o, y_o, theta_o = initial_pose
+        x_o_std, y_o_std, theta_o_std = initial_pose_sigma
+
+        for i in range(particle_count):
+            
+            valid = False
+
+            while not valid:
+
+                if global_localization:  # First localization mode
+                    # We create the particle in the bounds of the map using a uniform distribution
+                    particle_x = np.random.uniform(low=x_min, high=x_max)
+                    particle_y = np.random.uniform(low=y_min, high=y_max)
+                    orientation = np.random.choice([0, np.pi/2, np.pi, 3*np.pi/2])
+
+
+                else:  # Pose tracking mode
+                    # We create the particle near to its position using a normal distribution
+                    particle_x = np.random.normal(loc=x_o, scale=x_o_std)
+                    particle_y = np.random.normal(loc=y_o, scale=y_o_std)
+                    orientation = np.random.normal(loc=theta_o, scale=theta_o_std)
+
+                # If it is in an invalid place, we generate it again
+                if self._map.contains((particle_x, particle_y)):  # If the particle is valid, we store it
+                    particles[i] = [particle_x, 
+                                    particle_y, 
+                                    orientation % (2 * math.pi)]  # To normalize and just have values in range [0, 2*pi] 
+                    valid = True
         
         return particles
 
