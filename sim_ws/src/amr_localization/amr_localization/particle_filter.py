@@ -363,8 +363,16 @@ class ParticleFilter:
             float: Probability.
 
         """
-        probability = 1.0
 
         # TODO: 3.8. Complete the missing function body with your code.
+        
+        probability = 1.0
+
+        predicted_measurements = self._sense(pose=particle)
+
+        for measurement, predicted_measurement in zip(measurements, predicted_measurements):
+
+            if not np.isnan(measurement) and not np.isnan(predicted_measurement):
+                probability *= self._gaussian(mu=measurement, sigma=self._sigma_z, x=predicted_measurements)
         
         return probability
