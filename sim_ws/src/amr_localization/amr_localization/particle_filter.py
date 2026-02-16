@@ -4,7 +4,7 @@ import numpy as np
 import os
 import pytz
 import random
-
+from scipy.stats import norm
 from amr_localization.maps import Map
 from matplotlib import pyplot as plt
 from sklearn.cluster import DBSCAN
@@ -312,7 +312,7 @@ class ParticleFilter:
 
         """
         # TODO: 3.7. Complete the function body (i.e., replace the code below).
-        return 0.0
+        return norm.pdf(x, mu, sigma)
         
     def _lidar_rays(
         self, pose: tuple[float, float, float], indices: tuple[float], degree_increment: float = 1.5
