@@ -94,6 +94,12 @@ class ParticleFilterNode(LifecycleNode):
 
             # Publishers
             # TODO: 3.1. Create the /pose publisher (PoseStamped message).
+            self._pose_publisher = self.create_publisher(
+                PoseStamped,
+                "pose",
+                10
+            )
+
             
             # Subscribers
             scan_qos_profile = QoSProfile(
@@ -207,7 +213,25 @@ class ParticleFilterNode(LifecycleNode):
 
         """
         # TODO: 3.2. Complete the function body with your code (i.e., replace the pass statement).
-        pass
+        
+        # Create the msg
+        msg = PoseStamped()
+        msg.localized = self._localized  # We add this information wether is true or false
+        msg.header.stamp = self.get_clock().now().to_msg()  # We add the header (stamp)
+
+        if self._localized:  # If the robot is localized, we add the pose info to the msg
+            msg.pose.position.x = x_h
+            msg.pose.position.y = y_h
+
+            w,x,y,z = euler2quat(0.0, 0.0, theta_h) # Roll and pitch are zero. We introduce yaw
+            msg.pose.orientation.w = w
+            msg.pose.orientation.x = x
+            msg.pose.orientation.y = y
+            msg.pose.orientation.z = z
+
+        self._pose_publisher.publish(msg)  # We publish the msg
+
+        
         
 
 def main(args=None):

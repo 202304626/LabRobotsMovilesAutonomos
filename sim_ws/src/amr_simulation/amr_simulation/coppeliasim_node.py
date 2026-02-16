@@ -85,16 +85,53 @@ class CoppeliaSimNode(LifecycleNode):
             )
             
             # Subscribers
-            # TODO: 2.12. Subscribe to /cmd_vel. Connect it with with _next_step_callback.
-            self._cmd_vel_suscriber = self.create_subscription(
-                msg_type=TwistStamped,
-                topic="cmd_vel",
-                callback=self._next_step_callback,
-                qos_profile=10
-            )
+            if not enable_localization:  # In this case we go to the callback with just a TwistStamped (cmd_vel) message
+
+                # TODO: 2.12. Subscribe to /cmd_vel. Connect it with with _next_step_callback.
+                self._cmd_vel_suscriber = self.create_subscription(
+                    msg_type=TwistStamped,
+                    topic="cmd_vel",
+                    callback=self._next_step_callback,
+                    qos_profile=10
+                )
 
             
             # TODO: 3.3. Sync the /pose and /cmd_vel subscribers if enable_localization is True.
+            else:
+                # In this case we want to use the callback with both messages, with synchronization:
+                # We define an empty list of suscribers
+                self._subscribers: list[ message_filters.Subscriber ] = []
+
+                # Append the cmd vel suscriber
+                self._subscribers.append(
+                    message_filters.Subscriber(
+                        self,
+                        TwistStamped,
+                        "cmd_vel",
+                        10
+                    )
+                )
+
+                # Append the pose suscriber
+                self._subscribers.append(
+                    message_filters.Subscriber(
+                        self,
+                        PoseStamped,
+                        "pose",
+                        10
+                    )
+                )
+
+                # We wait until we receive all the measurements, and then we invoke the callback
+                ts = message_filters.ApproximateTimeSynchronizer(
+                    self._subscribers,
+                    queue_size=10,  # number of messages of each topic we need to receive until we are "completed"
+                    slop=10.0  # max delay in seconds to consider that 2 messages are able to be syncronized
+                )
+
+                # We register the callback that we want to execute once the measurements are received
+                ts.registerCallback(self._next_step_callback)
+
             
         except Exception:
             self.get_logger().error(f"{traceback.format_exc()}")
