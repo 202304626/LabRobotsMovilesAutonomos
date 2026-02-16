@@ -102,7 +102,39 @@ class ParticleFilter:
         self._iteration += 1
 
         # TODO: 3.5. Complete the function body with your code.
-        
+        # We assume that v and w are measured with respect of the robot
+
+        for particle in self._particles:
+
+            # Extract the components of this particle, to update them
+            x_o,y_o,theta_o = particle
+
+            # Generate noise
+            noise_v = np.random.normal(loc = 0, scale = self._sigma_v )
+            noise_w = np.random.normal(loc = 0, scale = self._sigma_w)
+
+            # Proyect the velocities to the x,y axis (global world axis)
+            x_vel = np.cos(theta_o)*v
+            y_vel = np.sin(theta_o)*v
+
+            # Update x,y,theta with noise
+            particle[0] += (x_vel+noise_v)*self._dt
+            particle[1] += (y_vel+noise_v)*self._dt 
+            particle[2] += (w+noise_w)*self._dt
+
+            # Normalize to make sure that the angle is in range [0, 2*pi]
+            particle[2] %= 2*np.pi 
+
+            # Compute the intersection with the walls
+            colission_segment = [(particle[0], particle[1]), (x_o, y_o)]
+            colissions, _ = self._map.check_collision(segment=colission_segment)
+
+            if colissions:
+                # Readjust the position of the particle, to avoid traspassing the wall
+                particle[0] = colissions[0]
+                particle[1] = colissions[1]
+
+
     def resample(self, measurements: list[float]) -> None:
         """Samples a new set of particles.
 
@@ -231,7 +263,6 @@ class ParticleFilter:
                     particle_x = np.random.uniform(low=x_min, high=x_max)
                     particle_y = np.random.uniform(low=y_min, high=y_max)
                     orientation = np.random.choice([0, np.pi/2, np.pi, 3*np.pi/2])
-
 
                 else:  # Pose tracking mode
                     # We create the particle near to its position using a normal distribution
