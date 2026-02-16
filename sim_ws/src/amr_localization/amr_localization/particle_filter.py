@@ -288,10 +288,14 @@ class ParticleFilter:
         Returns: List of predicted measurements; nan if a sensor is out of range.
 
         """
-        z_hat: list[float] = []
-
-        # TODO: 3.6. Complete the missing function body with your code.
         
+        # TODO: 3.6. Complete the missing function body with your code.
+        rays = range(0, 240, 240//8)
+
+        measured_points = self._lidar_rays(pose=pose, indices=rays)
+
+        z_hat: list[float] = [self._map.check_collision(segment=pair)[1] for pair in measured_points]
+
         return z_hat
 
     @staticmethod
