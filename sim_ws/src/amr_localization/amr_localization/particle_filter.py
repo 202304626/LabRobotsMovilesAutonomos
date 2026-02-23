@@ -152,12 +152,12 @@ class ParticleFilter:
             noise_w = np.random.normal(loc=0, scale=self._sigma_w)
 
             # Proyect the velocities to the x,y axis (global world axis)
-            x_vel = np.cos(theta_o) * v
-            y_vel = np.sin(theta_o) * v
+            x_vel = np.cos(theta_o) * (v + noise_v)
+            y_vel = np.sin(theta_o) * (v + noise_v)
 
             # Update x,y,theta with noise
-            particle[0] += (x_vel + noise_v) * self._dt
-            particle[1] += (y_vel + noise_v) * self._dt
+            particle[0] += x_vel * self._dt
+            particle[1] += y_vel * self._dt
             particle[2] += (w + noise_w) * self._dt
 
             # Normalize to make sure that the angle is in range [0, 2*pi]
@@ -426,6 +426,7 @@ class ParticleFilter:
 
         probability = 1.0
 
+
         predicted_measurements = self._sense(pose=particle)
         rays = range(0, 240, 240 // 8)
         subsampled_measurements = [measurements[i] for i in rays]
@@ -433,7 +434,7 @@ class ParticleFilter:
             subsampled_measurements, predicted_measurements
         ):
             if not np.isnan(measurement) and not np.isnan(predicted_measurement):
-                probability *= self._gaussian(
+                probability *=self._gaussian(
                     mu=measurement, sigma=self._sigma_z, x=predicted_measurement
                 )
 
