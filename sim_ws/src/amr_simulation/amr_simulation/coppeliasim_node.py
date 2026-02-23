@@ -170,7 +170,7 @@ class CoppeliaSimNode(LifecycleNode):
         Args:
             cmd_vel_msg: Message containing linear (v) and angular (w) speed commands.
             pose_msg: Message containing the estimated robot pose.
-
+1
         """
         # Check estimated pose
         self._check_estimated_pose(pose_msg)
