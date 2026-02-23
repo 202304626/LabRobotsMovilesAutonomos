@@ -35,6 +35,7 @@ class WallFollowerNode(LifecycleNode):
         self.declare_parameter("dt", 0.05)
         self.declare_parameter("enable_localization", False)
         self.declare_parameter("simulation", False)
+        self._stop_robot = None  # Declare
 
     def on_configure(self, state: LifecycleState) -> TransitionCallbackReturn:
         """Handles a configuring transition.
@@ -58,6 +59,8 @@ class WallFollowerNode(LifecycleNode):
             self._simulation = (
                 self.get_parameter("simulation").get_parameter_value().bool_value
             )
+
+            self._stop_robot = False  # Initialize internal variable
 
             # Attribute and object initializations
             self._wall_follower = WallFollower(
