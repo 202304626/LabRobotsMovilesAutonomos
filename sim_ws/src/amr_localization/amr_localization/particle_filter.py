@@ -90,33 +90,28 @@ class ParticleFilter:
         localized = False
         pose = (float("nan"), float("nan"), float("nan"))
 
-        particles_projected = np.array(self._particles).copy()
+        particles_projected = np.array(self._particles, dtype=float)
+        theta = particles_projected[:, -1]
 
         # Ángulo (última columna)
         theta = particles_projected[:, -1]
 
-        # Reemplazar la última dimensión por cos y sin
-        particles_projected = np.hstack([
-            particles_projected[:, :-1],
-            np.cos(theta)[:, None],
-            np.sin(theta)[:, None]
-        ])
-        clustering = DBSCAN(eps=0.2, min_samples=5).fit(particles_projected)       
+        particles_projected = np.hstack(
+            [particles_projected[:, :-1], np.cos(theta)[:, None], np.sin(theta)[:, None]]
+        )
+        clustering = DBSCAN(eps=0.2, min_samples=5).fit(particles_projected)
         labels = clustering.labels_
         n_clusters = len(set(labels) - {-1})
         indexes = clustering.core_sample_indices_
         if n_clusters == 1:
             localized = True
-            
-            cluster_particles = self._particles[indexes]
-            
+            cluster_particles = np.asarray(self._particles[indexes], dtype=np.float64)
 
             x_mean = np.mean(cluster_particles[:, 0])
             y_mean = np.mean(cluster_particles[:, 1])
 
             theta_mean = math.atan2(
-                np.mean(np.sin(cluster_particles[:, -1])),
-                np.mean(np.cos(cluster_particles[:, -2]))
+                np.mean(np.sin(cluster_particles[:, -1])), np.mean(np.cos(cluster_particles[:, -2]))
             ) % (2 * math.pi)
 
             pose = (x_mean, y_mean, theta_mean)
@@ -426,7 +421,6 @@ class ParticleFilter:
 
         probability = 1.0
 
-
         predicted_measurements = self._sense(pose=particle)
         rays = range(0, 240, 240 // 8)
         subsampled_measurements = [measurements[i] for i in rays]
@@ -434,7 +428,7 @@ class ParticleFilter:
             subsampled_measurements, predicted_measurements
         ):
             if not np.isnan(measurement) and not np.isnan(predicted_measurement):
-                probability *=self._gaussian(
+                probability *= self._gaussian(
                     mu=measurement, sigma=self._sigma_z, x=predicted_measurement
                 )
 

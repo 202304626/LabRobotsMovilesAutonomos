@@ -8,7 +8,7 @@ from rclpy.qos import (
 )
 
 import message_filters
-from amr_msgs.msg import PoseStamped, ControlStop
+from amr_msgs.msg import PoseStamped
 from geometry_msgs.msg import Twist, TwistStamped
 from nav_msgs.msg import Odometry
 from sensor_msgs.msg import LaserScan
@@ -44,21 +44,15 @@ class WallFollowerNode(LifecycleNode):
             state: Current lifecycle state.
 
         """
-        self.get_logger().info(
-            f"Transitioning from '{state.label}' to 'inactive' state."
-        )
+        self.get_logger().info(f"Transitioning from '{state.label}' to 'inactive' state.")
 
         try:
             # Parameters
             dt = self.get_parameter("dt").get_parameter_value().double_value
             enable_localization = (
-                self.get_parameter("enable_localization")
-                .get_parameter_value()
-                .bool_value
+                self.get_parameter("enable_localization").get_parameter_value().bool_value
             )
-            self._simulation = (
-                self.get_parameter("simulation").get_parameter_value().bool_value
-            )
+            self._simulation = self.get_parameter("simulation").get_parameter_value().bool_value
 
             self._stop_robot = False  # Initialize internal variable
 
@@ -90,9 +84,7 @@ class WallFollowerNode(LifecycleNode):
 
             # We append the laser scan suscriber
             self._subscribers.append(
-                message_filters.Subscriber(
-                    self, LaserScan, "scan", qos_profile=qos_lidar_profile
-                )
+                message_filters.Subscriber(self, LaserScan, "scan", qos_profile=qos_lidar_profile)
             )
 
             # We wait until we receive all the measurements, and then we invoke the callback
@@ -106,14 +98,6 @@ class WallFollowerNode(LifecycleNode):
             ts.registerCallback(self._compute_commands_callback)
 
             # TODO: 4.12. Add /pose to the synced subscriptions only if localization is enabled.
-
-            # Create 3.11.2 Subscriber for the personalized topic
-            self._personalized_subscriber = self.create_subscription(
-                msg_type=ControlStop,
-                topic="stop_condition",
-                callback=self._compute_personalized_stop_callback,
-                qos_profile=10,
-            )
 
         except Exception:
             self.get_logger().error(f"{traceback.format_exc()}")
@@ -132,18 +116,6 @@ class WallFollowerNode(LifecycleNode):
 
         return super().on_activate(state)
 
-    # 3.11.2 Function to change internal node value
-    def _compute_personalized_stop_callback(self, msg: ControlStop):
-        """Subscriber callback. Executes a wall-following controller and publishes v and w commands.
-
-        Ceases to operate once the robot is localized.
-
-        Args:
-            msg: Message containing the localization control information.
-
-        """
-        self._stop_robot = msg.stop_robot
-
     def _compute_commands_callback(
         self,
         odom_msg: Odometry,
@@ -161,16 +133,11 @@ class WallFollowerNode(LifecycleNode):
 
         """
         if not pose_msg.localized:
-
             # TODO: 2.8. Parse the odometry from the Odometry message (i.e., read z_v and z_w).
 
             # We need to extract the info from the messages inside the message
-            z_v: float = (
-                odom_msg.twist.twist.linear.x
-            )  # linear vel from the robot in x axis
-            z_w: float = (
-                odom_msg.twist.twist.angular.z
-            )  # angular vel from the robot in z axis
+            z_v: float = odom_msg.twist.twist.linear.x  # linear vel from the robot in x axis
+            z_w: float = odom_msg.twist.twist.angular.z  # angular vel from the robot in z axis
 
             # TODO: 2.9. Parse LiDAR measurements from the LaserScan message (i.e., read z_scan).
             z_scan: list[float] = list(scan_msg.ranges)
