@@ -39,6 +39,10 @@ class ParticleFilterNode(LifecycleNode):
         self.declare_parameter("simulation", False)
         self.declare_parameter("steps_btw_sense_updates", 10)
         self.declare_parameter("world", "lab03")
+        
+        # 3.11.3 Declare parameter for saving history
+        self._odometry_estimate_list = None
+        self._scan_last_measures = None
 
     def on_configure(self, state: LifecycleState) -> TransitionCallbackReturn:
         """Handles a configuring transition.
@@ -52,6 +56,9 @@ class ParticleFilterNode(LifecycleNode):
         )
 
         try:
+
+            self._odometry_estimate_list = []
+
             # Parameters
             dt = self.get_parameter("dt").get_parameter_value().double_value
             self._enable_plot = (
@@ -262,7 +269,37 @@ class ParticleFilterNode(LifecycleNode):
             msg.pose.orientation.z = z
 
         self._pose_publisher.publish(msg)  # We publish the msg
+    
 
+    # 3.11.3 Callback functions for saving history of /scan and /odometry subscriptions
+    def _callback_scan_saving_history(self,scan_msg: LaserScan):
+        """Subscriber callback. Executes a particle filter and publishes (x, y, theta) estimates.
+
+        Args:
+            scan_msg: Message containing LiDAR sensor readings.
+
+        """
+        # Parse measurements
+        z_scan: list[float] = scan_msg.ranges
+
+        self._scan_last_measures = z_scan
+    
+    # 3.11.3 /odometry
+    def _callback_odometry_saving_history(self, odom_msg: Odometry):
+        """Subscriber callback. Executes a particle filter and publishes (x, y, theta) estimates.
+
+        Args:
+            odom_msg: Message containing odometry measurements.
+
+        """
+        # Parse measurements
+        z_v: float = odom_msg.twist.twist.linear.x
+        z_w: float = odom_msg.twist.twist.angular.z
+
+        if abs(z_v) >= 1e-6 and abs(z_w) >= 1e-6:
+            self._odometry_estimate_list.append((z_v, z_w))
+
+        
 
 def main(args=None):
     rclpy.init(args=args)
