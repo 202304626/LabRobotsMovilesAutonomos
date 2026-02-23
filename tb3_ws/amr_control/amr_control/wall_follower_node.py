@@ -3,7 +3,7 @@ from rclpy.lifecycle import LifecycleNode, LifecycleState, TransitionCallbackRet
 from rclpy.qos import QoSProfile, QoSDurabilityPolicy, QoSHistoryPolicy, QoSReliabilityPolicy
 
 import message_filters
-from amr_msgs.msg import PoseStamped
+from amr_msgs.msg import PoseStamped, ControlStop
 from geometry_msgs.msg import Twist, TwistStamped
 from nav_msgs.msg import Odometry
 from sensor_msgs.msg import LaserScan
@@ -124,12 +124,31 @@ class WallFollowerNode(LifecycleNode):
 
             # TODO: 4.12. Add /pose to the synced subscriptions only if localization is enabled.
             
+            # Create 3.11.2 Subscriber for the personalized topic
+            self._personalized_subscriber = self.create_subscription(
+                msg_type=ControlStop,
+                topic="stop_condition",
+                callback=self._compute_personalized_stop_callback,
+                qos_profile=10,
+            )
+
         except Exception:
             self.get_logger().error(f"{traceback.format_exc()}")
             return TransitionCallbackReturn.ERROR
 
         return super().on_configure(state)
     
+    # 3.11.2 Function to change internal node value
+    def _compute_personalized_stop_callback(self, msg: ControlStop):
+        """Subscriber callback. Executes a wall-following controller and publishes v and w commands.
+
+        Ceases to operate once the robot is localized.
+
+        Args:
+            msg: Message containing the localization control information.
+
+        """
+        self._stop_robot = msg.stop_robot
 
     def _store_measurements_callback(self, odom_msg: Odometry, scan_msg: LaserScan, pose_msg: PoseStamped = PoseStamped()):
         """Stores the latest sensor measurements."""
