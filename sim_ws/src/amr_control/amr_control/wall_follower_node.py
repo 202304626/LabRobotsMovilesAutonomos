@@ -1,9 +1,14 @@
 import rclpy
 from rclpy.lifecycle import LifecycleNode, LifecycleState, TransitionCallbackReturn
-from rclpy.qos import QoSProfile, QoSDurabilityPolicy, QoSHistoryPolicy, QoSReliabilityPolicy
+from rclpy.qos import (
+    QoSProfile,
+    QoSDurabilityPolicy,
+    QoSHistoryPolicy,
+    QoSReliabilityPolicy,
+)
 
 import message_filters
-from amr_msgs.msg import PoseStamped
+from amr_msgs.msg import PoseStamped, ControlStopping
 from geometry_msgs.msg import Twist, TwistStamped
 from nav_msgs.msg import Odometry
 from sensor_msgs.msg import LaserScan
@@ -19,6 +24,7 @@ qos_lidar_profile = QoSProfile(
     reliability=QoSReliabilityPolicy.BEST_EFFORT,
     durability=QoSDurabilityPolicy.VOLATILE,
 )
+
 
 class WallFollowerNode(LifecycleNode):
     def __init__(self):
@@ -37,15 +43,21 @@ class WallFollowerNode(LifecycleNode):
             state: Current lifecycle state.
 
         """
-        self.get_logger().info(f"Transitioning from '{state.label}' to 'inactive' state.")
+        self.get_logger().info(
+            f"Transitioning from '{state.label}' to 'inactive' state."
+        )
 
         try:
             # Parameters
             dt = self.get_parameter("dt").get_parameter_value().double_value
             enable_localization = (
-                self.get_parameter("enable_localization").get_parameter_value().bool_value
+                self.get_parameter("enable_localization")
+                .get_parameter_value()
+                .bool_value
             )
-            self._simulation = self.get_parameter("simulation").get_parameter_value().bool_value
+            self._simulation = (
+                self.get_parameter("simulation").get_parameter_value().bool_value
+            )
 
             # Attribute and object initializations
             self._wall_follower = WallFollower(
@@ -59,34 +71,24 @@ class WallFollowerNode(LifecycleNode):
 
             # This publisher will be modified when we transfer the code to the physical robot
             self._commands_publisher = self.create_publisher(
-                msg_type=TwistStamped,
-                topic = "cmd_vel",
-                qos_profile=10
+                msg_type=TwistStamped, topic="cmd_vel", qos_profile=10
             )
-            
+
             # Subscribers
             # TODO: 2.7. Synchronize _compute_commands_callback with /odometry and /scan.
 
             # We define an empty list of suscribers
-            self._subscribers: list[ message_filters.Subscriber ] = []
+            self._subscribers: list[message_filters.Subscriber] = []
 
             # We append the odometry suscriber
             self._subscribers.append(
-                message_filters.Subscriber(
-                    self,
-                    Odometry,
-                    "odometry",
-                    qos_profile = 10
-                )
+                message_filters.Subscriber(self, Odometry, "odometry", qos_profile=10)
             )
 
             # We append the laser scan suscriber
             self._subscribers.append(
                 message_filters.Subscriber(
-                    self,
-                    LaserScan,
-                    "scan",
-                    qos_profile = qos_lidar_profile
+                    self, LaserScan, "scan", qos_profile=qos_lidar_profile
                 )
             )
 
@@ -94,14 +96,22 @@ class WallFollowerNode(LifecycleNode):
             ts = message_filters.ApproximateTimeSynchronizer(
                 self._subscribers,
                 queue_size=10,  # number of messages of each topic we need to receive until we are "completed"
-                slop=10.0  # max delay in seconds to consider that 2 messages are able to be syncronized
+                slop=10.0,  # max delay in seconds to consider that 2 messages are able to be syncronized
             )
 
             # We register the callback that we want to execute once the measurements are received
             ts.registerCallback(self._compute_commands_callback)
 
             # TODO: 4.12. Add /pose to the synced subscriptions only if localization is enabled.
-            
+
+            # Create 3.11.2 Subscriber for the personalized topic
+            self._personalized_subscriber = self.create_subscription(
+                msg_type=ControlStopping,
+                topic="ControlStopping",
+                callback=self._compute_personalized_stop_callback,
+                qos_profile=10,
+            )
+
         except Exception:
             self.get_logger().error(f"{traceback.format_exc()}")
             return TransitionCallbackReturn.ERROR
@@ -119,8 +129,23 @@ class WallFollowerNode(LifecycleNode):
 
         return super().on_activate(state)
 
+    # 3.11.2 Function to change internal node value
+    def _compute_personalized_stop_callback(self, msg: ControlStopping):
+        """Subscriber callback. Executes a wall-following controller and publishes v and w commands.
+
+        Ceases to operate once the robot is localized.
+
+        Args:
+            msg: Message containing the localization control information.
+
+        """
+        self._stop_robot = msg.stop_robot
+
     def _compute_commands_callback(
-        self, odom_msg: Odometry, scan_msg: LaserScan, pose_msg: PoseStamped = PoseStamped()
+        self,
+        odom_msg: Odometry,
+        scan_msg: LaserScan,
+        pose_msg: PoseStamped = PoseStamped(),
     ):
         """Subscriber callback. Executes a wall-following controller and publishes v and w commands.
 
@@ -133,21 +158,30 @@ class WallFollowerNode(LifecycleNode):
 
         """
         if not pose_msg.localized:
+
             # TODO: 2.8. Parse the odometry from the Odometry message (i.e., read z_v and z_w).
 
             # We need to extract the info from the messages inside the message
-            z_v: float = odom_msg.twist.twist.linear.x  # linear vel from the robot in x axis
-            z_w: float = odom_msg.twist.twist.angular.z  # angular vel from the robot in z axis
-            
+            z_v: float = (
+                odom_msg.twist.twist.linear.x
+            )  # linear vel from the robot in x axis
+            z_w: float = (
+                odom_msg.twist.twist.angular.z
+            )  # angular vel from the robot in z axis
+
             # TODO: 2.9. Parse LiDAR measurements from the LaserScan message (i.e., read z_scan).
             z_scan: list[float] = list(scan_msg.ranges)
-            
+
             # Execute wall follower
             v, w = self._wall_follower.compute_commands(z_scan, z_v, z_w)
             self.get_logger().info(f"Commands: v = {v:.3f} m/s, w = {w:+.3f} rad/s")
 
             # Publish
-            self._publish_velocity_commands(v, w)
+            # 3.11.2 Each run of compute_commands_callback, we check the value of the internal variable that controls whether the robot should stop or not. If it is True, we publish 0.0 for both v and w. Otherwise, we publish the values computed by the wall follower.
+            if self._stop_robot:
+                self._publish_velocity_commands(0.0, 0.0)
+            else:
+                self._publish_velocity_commands(v, w)
 
     def _publish_velocity_commands(self, v: float, w: float) -> None:
         """Publishes velocity commands in a geometry_msgs.msg.TwistStamped message.
@@ -158,16 +192,16 @@ class WallFollowerNode(LifecycleNode):
 
         """
         # TODO: 2.11. Complete the function body with your code (i.e., replace the pass statement).
-        
+
         # We create a TwistStamped() messages and introduce the info of v and w
         msg = TwistStamped()
         msg.header.stamp = self.get_clock().now().to_msg()
         msg.twist.linear.x = v
         msg.twist.angular.z = w
 
-        # We publish the message through the commands publisher 
+        # We publish the message through the commands publisher
         self._commands_publisher.publish(msg)
-        
+
 
 def main(args=None):
     rclpy.init(args=args)

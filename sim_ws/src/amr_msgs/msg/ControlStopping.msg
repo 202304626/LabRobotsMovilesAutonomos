@@ -1,2 +1,2 @@
 std_msgs/Header header
-bool localized
+bool stop_robot
