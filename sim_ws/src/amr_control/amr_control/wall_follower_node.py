@@ -8,7 +8,7 @@ from rclpy.qos import (
 )
 
 import message_filters
-from amr_msgs.msg import PoseStamped, ControlStopping
+from amr_msgs.msg import PoseStamped, ControlStop
 from geometry_msgs.msg import Twist, TwistStamped
 from nav_msgs.msg import Odometry
 from sensor_msgs.msg import LaserScan
@@ -106,8 +106,8 @@ class WallFollowerNode(LifecycleNode):
 
             # Create 3.11.2 Subscriber for the personalized topic
             self._personalized_subscriber = self.create_subscription(
-                msg_type=ControlStopping,
-                topic="ControlStopping",
+                msg_type=ControlStop,
+                topic="stop_condition",
                 callback=self._compute_personalized_stop_callback,
                 qos_profile=10,
             )
@@ -130,7 +130,7 @@ class WallFollowerNode(LifecycleNode):
         return super().on_activate(state)
 
     # 3.11.2 Function to change internal node value
-    def _compute_personalized_stop_callback(self, msg: ControlStopping):
+    def _compute_personalized_stop_callback(self, msg: ControlStop):
         """Subscriber callback. Executes a wall-following controller and publishes v and w commands.
 
         Ceases to operate once the robot is localized.

@@ -1,9 +1,14 @@
 import rclpy
 from rclpy.lifecycle import LifecycleNode, LifecycleState, TransitionCallbackReturn
-from rclpy.qos import QoSProfile, QoSDurabilityPolicy, QoSHistoryPolicy, QoSReliabilityPolicy
+from rclpy.qos import (
+    QoSProfile,
+    QoSDurabilityPolicy,
+    QoSHistoryPolicy,
+    QoSReliabilityPolicy,
+)
 
 import message_filters
-from amr_msgs.msg import PoseStamped
+from amr_msgs.msg import PoseStamped, ControlStop
 from nav_msgs.msg import Odometry
 from sensor_msgs.msg import LaserScan
 
@@ -42,31 +47,45 @@ class ParticleFilterNode(LifecycleNode):
             state: Current lifecycle state.
 
         """
-        self.get_logger().info(f"Transitioning from '{state.label}' to 'inactive' state.")
+        self.get_logger().info(
+            f"Transitioning from '{state.label}' to 'inactive' state."
+        )
 
         try:
             # Parameters
             dt = self.get_parameter("dt").get_parameter_value().double_value
-            self._enable_plot = self.get_parameter("enable_plot").get_parameter_value().bool_value
+            self._enable_plot = (
+                self.get_parameter("enable_plot").get_parameter_value().bool_value
+            )
             global_localization = (
-                self.get_parameter("global_localization").get_parameter_value().bool_value
+                self.get_parameter("global_localization")
+                .get_parameter_value()
+                .bool_value
             )
             initial_pose = tuple(
-                self.get_parameter("initial_pose").get_parameter_value().double_array_value.tolist()
+                self.get_parameter("initial_pose")
+                .get_parameter_value()
+                .double_array_value.tolist()
             )
             initial_pose_sigma = tuple(
                 self.get_parameter("initial_pose_sigma")
                 .get_parameter_value()
                 .double_array_value.tolist()
             )
-            particles = self.get_parameter("particles").get_parameter_value().integer_value
+            particles = (
+                self.get_parameter("particles").get_parameter_value().integer_value
+            )
             sigma_v = self.get_parameter("sigma_v").get_parameter_value().double_value
             sigma_w = self.get_parameter("sigma_w").get_parameter_value().double_value
             sigma_z = self.get_parameter("sigma_z").get_parameter_value().double_value
             self._steps_btw_sense_updates = (
-                self.get_parameter("steps_btw_sense_updates").get_parameter_value().integer_value
+                self.get_parameter("steps_btw_sense_updates")
+                .get_parameter_value()
+                .integer_value
             )
-            self._simulation = self.get_parameter("simulation").get_parameter_value().bool_value
+            self._simulation = (
+                self.get_parameter("simulation").get_parameter_value().bool_value
+            )
             world = self.get_parameter("world").get_parameter_value().string_value
 
             # Attribute and object initializations
@@ -94,13 +113,8 @@ class ParticleFilterNode(LifecycleNode):
 
             # Publishers
             # TODO: 3.1. Create the /pose publisher (PoseStamped message).
-            self._pose_publisher = self.create_publisher(
-                PoseStamped,
-                "pose",
-                10
-            )
+            self._pose_publisher = self.create_publisher(PoseStamped, "pose", 10)
 
-            
             # Subscribers
             scan_qos_profile = QoSProfile(
                 history=QoSHistoryPolicy.KEEP_LAST,
@@ -110,15 +124,24 @@ class ParticleFilterNode(LifecycleNode):
             )
 
             self._subscribers: list[message_filters.Subscriber] = []
-            self._subscribers.append(message_filters.Subscriber(self, Odometry, "odometry"))
             self._subscribers.append(
-                message_filters.Subscriber(self, LaserScan, "scan", qos_profile=scan_qos_profile)
+                message_filters.Subscriber(self, Odometry, "odometry")
+            )
+            self._subscribers.append(
+                message_filters.Subscriber(
+                    self, LaserScan, "scan", qos_profile=scan_qos_profile
+                )
             )
 
             ts = message_filters.ApproximateTimeSynchronizer(
                 self._subscribers, queue_size=10, slop=9
             )
             ts.registerCallback(self._compute_pose_callback)
+
+            # 3.11.2 Create publisher for the stop condition
+            self._stop_publisher = self.create_publisher(
+                ControlStop, "stop_condition", 10
+            )
 
         except Exception:
             self.get_logger().error(f"{traceback.format_exc()}")
@@ -158,7 +181,9 @@ class ParticleFilterNode(LifecycleNode):
         # Publish
         self._publish_pose_estimate(x_h, y_h, theta_h)
 
-    def _execute_measurement_step(self, z_scan: list[float]) -> tuple[float, float, float]:
+    def _execute_measurement_step(
+        self, z_scan: list[float]
+    ) -> tuple[float, float, float]:
         """Executes and monitors the measurement step (sense) of the particle filter.
 
         Args:
@@ -171,6 +196,7 @@ class ParticleFilterNode(LifecycleNode):
 
         if self._localized or not self._steps % self._steps_btw_sense_updates:
             start_time = time.perf_counter()
+            ## here? publish?
             self._particle_filter.resample(z_scan)
             sense_time = time.perf_counter() - start_time
 
@@ -213,17 +239,23 @@ class ParticleFilterNode(LifecycleNode):
 
         """
         # TODO: 3.2. Complete the function body with your code (i.e., replace the pass statement).
-        
+
         # Create the msg
         msg = PoseStamped()
-        msg.localized = self._localized  # We add this information wether is true or false
+        msg.localized = (
+            self._localized
+        )  # We add this information wether is true or false
         msg.header.stamp = self.get_clock().now().to_msg()  # We add the header (stamp)
 
-        if self._localized:  # If the robot is localized, we add the pose info to the msg
+        if (
+            self._localized
+        ):  # If the robot is localized, we add the pose info to the msg
             msg.pose.position.x = x_h
             msg.pose.position.y = y_h
 
-            w,x,y,z = euler2quat(0.0, 0.0, theta_h) # Roll and pitch are zero. We introduce yaw
+            w, x, y, z = euler2quat(
+                0.0, 0.0, theta_h
+            )  # Roll and pitch are zero. We introduce yaw
             msg.pose.orientation.w = w
             msg.pose.orientation.x = x
             msg.pose.orientation.y = y
@@ -231,8 +263,6 @@ class ParticleFilterNode(LifecycleNode):
 
         self._pose_publisher.publish(msg)  # We publish the msg
 
-        
-        
 
 def main(args=None):
     rclpy.init(args=args)
