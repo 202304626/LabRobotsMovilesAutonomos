@@ -94,12 +94,15 @@ class ParticleFilter:
         theta = particles_projected[:, -1]  # last column of each row (particle)
 
         particles_projected = np.hstack(
-            [particles_projected[:, :-1], np.cos(theta)[:, None], np.sin(theta)[:, None]]
-        )
+            [particles_projected[:, :-1], np.cos(theta)[:, None], np.sin(theta)[:, None]]  
+        ) # Add the sin and cos, due to the discontinuity of the angle
+
         clustering = DBSCAN(eps=0.2, min_samples=5).fit(particles_projected)
         labels = clustering.labels_
         n_clusters = len(set(labels) - {-1})
         indexes = clustering.core_sample_indices_
+
+        # Check how many clusters are, to adapt the number of particles to resample in the next iteration
         if n_clusters == 1:
             localized = True
             cluster_particles = np.asarray(self._particles[indexes], dtype=np.float64)
@@ -113,11 +116,7 @@ class ParticleFilter:
 
             pose = (x_mean, y_mean, theta_mean)
 
-            # Review *****
-            # indices = np.random.choice(len(cluster_particles), size=50, replace=True)
-            # self._particles = cluster_particles[indices]
-            # *****
-
+            # We reduce the number of particles since there is just 1 cluster
             self._particle_count = 50
 
         elif n_clusters > 1:
