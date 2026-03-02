@@ -91,10 +91,7 @@ class ParticleFilter:
         pose = (float("nan"), float("nan"), float("nan"))
 
         particles_projected = np.array(self._particles, dtype=float)
-        theta = particles_projected[:, -1]
-
-        # Ángulo (última columna)
-        theta = particles_projected[:, -1]
+        theta = particles_projected[:, -1]  # last column of each row (particle)
 
         particles_projected = np.hstack(
             [particles_projected[:, :-1], np.cos(theta)[:, None], np.sin(theta)[:, None]]
@@ -116,8 +113,11 @@ class ParticleFilter:
 
             pose = (x_mean, y_mean, theta_mean)
 
-            indices = np.random.choice(len(cluster_particles), size=50, replace=True)
-            self._particles = cluster_particles[indices]
+            # Review *****
+            # indices = np.random.choice(len(cluster_particles), size=50, replace=True)
+            # self._particles = cluster_particles[indices]
+            # *****
+
             self._particle_count = 50
 
         elif n_clusters > 1:
