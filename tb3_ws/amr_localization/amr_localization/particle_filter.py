@@ -92,24 +92,23 @@ class ParticleFilter:
 
         particles_projected = np.array(self._particles).copy()
 
-        # Ángulo (última columna)
         theta = particles_projected[:, -1]
 
-        # Reemplazar la última dimensión por cos y sin
         particles_projected = np.hstack([
             particles_projected[:, :-1],
             np.cos(theta)[:, None],
             np.sin(theta)[:, None]
         ])
+
         clustering = DBSCAN(eps=0.2, min_samples=5).fit(particles_projected)       
         labels = clustering.labels_
         n_clusters = len(set(labels) - {-1})
         indexes = clustering.core_sample_indices_
+
         if n_clusters == 1:
             localized = True
             
             cluster_particles = self._particles[indexes]
-            
 
             x_mean = np.mean(cluster_particles[:, 0])
             y_mean = np.mean(cluster_particles[:, 1])
@@ -121,8 +120,6 @@ class ParticleFilter:
 
             pose = (x_mean, y_mean, theta_mean)
 
-            indices = np.random.choice(len(cluster_particles), size=50, replace=True)
-            self._particles = cluster_particles[indices]
             self._particle_count = 50
 
         elif n_clusters > 1:
