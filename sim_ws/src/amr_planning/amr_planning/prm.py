@@ -84,12 +84,59 @@ class PRM:
         if not self._map.contains(goal):
             raise ValueError("Goal location is outside the environment.")
 
+        h = {
+            node: np.linalg.norm(np.array(node) - np.array(goal)) for node in self._graph.keys()
+        }  # Heuristic function
+
         ancestors: dict[tuple[float, float], tuple[float, float]] = {}  # {(x, y: (x_prev, y_prev)}
 
         # TODO: 4.3. Complete the function body (i.e., replace the code below).
         path: list[tuple[float, float]] = []
 
-        return path
+        # Find the closest nodes in the graph to the start and goal locations
+        closest_start_node = min(
+            self._graph.keys(), key=lambda node: np.linalg.norm(np.array(node) - np.array(start))
+        )
+        closest_goal_node = min(
+            self._graph.keys(), key=lambda node: np.linalg.norm(np.array(node) - np.array(goal))
+        )
+
+        ancestors[goal] = closest_goal_node
+        ancestors[closest_start_node] = start
+
+        g = 0
+        f = h[closest_start_node] + g
+        open_list = {closest_start_node: (f, g)}  # {(x, y): (f,g)}
+        closed_list = set()  # set of (x, y) tuples
+
+        while len(open_list.keys()) != 0:
+            current_node = min(
+                open_list.keys(), key=lambda node: open_list[node][0]
+            )  # Get the node with min f
+
+            current_g = open_list[current_node][1]
+
+            if current_node == closest_goal_node:
+                path = self._reconstruct_path(start, goal, ancestors)
+                return path
+
+            closed_list.add(current_node)
+            del open_list[current_node]
+
+            neighbors = self._graph[current_node]
+            for neighbor in neighbors:
+                if neighbor in closed_list:
+                    continue
+
+                neigh_g = current_g + np.linalg.norm(np.array(current_node) - np.array(neighbor))
+                # check if new g is better than old g
+                if neighbor not in open_list or neigh_g < open_list[neighbor][1]:
+                    ancestors[neighbor] = current_node
+                    g = neigh_g
+                    f = g + h[neighbor]
+                    open_list[neighbor] = (f, g)
+
+        raise ValueError("No path found from start to goal.")
 
     @staticmethod
     def smooth_path(
@@ -115,8 +162,23 @@ class PRM:
         """
         # TODO: 4.5. Complete the function body (i.e., load smoothed_path).
         smoothed_path: list[tuple[float, float]] = []
+        s = np.array(path)
 
-        return smoothed_path
+        while True:
+            s_anterior = np.copy(s)
+            smoothed_path: list[tuple[float, float]] = []
+            for i in range(1, len(path) - 1):
+                p_i = path[i]
+
+                s[i] = (
+                    s[i]
+                    + data_weight * (np.array(p_i) - np.array(s[i]))
+                    + smooth_weight * (s[i + 1] + s[i - 1] - 2 * s[i])
+                )
+                smoothed_path.append(s[i])
+
+            if np.sum(np.abs(s_anterior - s)) < tolerance:
+                return smoothed_path
 
     def plot(
         self,
@@ -338,6 +400,13 @@ class PRM:
 
         # TODO: 4.4. Complete the missing function body with your code.
 
+        current_node = goal
+        while current_node != start:
+            path.append(current_node)
+            current_node = ancestors[current_node]
+        path.append(start)
+        path.reverse()
+
         return path
 
 
@@ -349,14 +418,14 @@ if __name__ == "__main__":
 
     # Create the roadmap
     start_time = time.perf_counter()
-    prm = PRM(map_path, use_grid=True, node_count=250, grid_size=0.1, connection_distance=0.15)
+    prm = PRM(map_path, use_grid=True, node_count=1000, grid_size=0.1, connection_distance=0.20)
     roadmap_creation_time = time.perf_counter() - start_time
 
     print(f"Roadmap creation time: {roadmap_creation_time:1.3f} s")
 
     # Find the path
     start_time = time.perf_counter()
-    path = prm.find_path(start=(-1.0, -1.0), goal=(-0.6, 1.0))
+    path = prm.find_path(start=(-1.0, -1.0), goal=(1.0, 1.0))
     pathfinding_time = time.perf_counter() - start_time
 
     print(f"Pathfinding time: {pathfinding_time:1.3f} s")
@@ -364,7 +433,7 @@ if __name__ == "__main__":
     # Smooth the path
     start_time = time.perf_counter()
     smoothed_path = prm.smooth_path(
-        path, data_weight=0.1, smooth_weight=0.3, additional_smoothing_points=3
+        path, data_weight=0.1, smooth_weight=0.1, additional_smoothing_points=3
     )
     smoothing_time = time.perf_counter() - start_time
 
