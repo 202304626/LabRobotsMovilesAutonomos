@@ -90,7 +90,7 @@ class PRM:
         path: list[tuple[float, float]] = []
 
         return path
-        
+
     @staticmethod
     def smooth_path(
         path: list[tuple[float, float]],
@@ -115,7 +115,7 @@ class PRM:
         """
         # TODO: 4.5. Complete the function body (i.e., load smoothed_path).
         smoothed_path: list[tuple[float, float]] = []
-        
+
         return smoothed_path
 
     def plot(
@@ -238,7 +238,17 @@ class PRM:
 
         """
         # TODO: 4.2. Complete the missing function body with your code.
-        
+
+        for node in graph.keys():
+            for other_node in graph.keys():
+                if node != other_node:
+                    distance = np.linalg.norm(np.array(node) - np.array(other_node))
+                    if (  # Change for cross
+                        distance <= connection_distance
+                        and not self._map.crosses([node, other_node])
+                    ):
+                        graph[node].append(other_node)
+
         return graph
 
     def _create_graph(
@@ -284,7 +294,27 @@ class PRM:
         graph: dict[tuple[float, float], list[tuple[float, float]]] = {}
 
         # TODO: 4.1. Complete the missing function body with your code.
-        
+        x_min, y_min, x_max, y_max = self._map.bounds()
+
+        if use_grid:
+            grid = np.mgrid[
+                x_min : x_max + grid_size : grid_size, y_min : y_max + grid_size : grid_size
+            ]
+            for x in grid[0].flat:
+                for y in grid[1].flat:
+                    if self._map.contains((x, y)):
+                        graph[(x, y)] = []
+        else:
+            for _ in range(node_count):
+                valid = False
+                while not valid:
+                    particle_x = np.random.uniform(low=x_min, high=x_max)
+                    particle_y = np.random.uniform(low=y_min, high=y_max)
+
+                    if self._map.contains((particle_x, particle_y)):
+                        valid = True
+                        graph[(particle_x, particle_y)] = []
+
         return graph
 
     def _reconstruct_path(
@@ -307,7 +337,7 @@ class PRM:
         path: list[tuple[float, float]] = []
 
         # TODO: 4.4. Complete the missing function body with your code.
-        
+
         return path
 
 
