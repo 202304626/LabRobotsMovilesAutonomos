@@ -161,12 +161,16 @@ class PRM:
 
         """
         # TODO: 4.5. Complete the function body (i.e., load smoothed_path).
+
+        # Poner aqui algo de añadir en las esquinas, usar lo del area signada o algo del estilo
+        # de forma que añadamos solo en esquinas ya que realmente en lineas rectas es más irrelevante
+
         smoothed_path: list[tuple[float, float]] = []
         s = np.array(path)
 
         while True:
             s_anterior = np.copy(s)
-            smoothed_path: list[tuple[float, float]] = []
+            smoothed_path: list[tuple[float, float]] = [s[0]]
             for i in range(1, len(path) - 1):
                 p_i = path[i]
 
@@ -178,6 +182,7 @@ class PRM:
                 smoothed_path.append(s[i])
 
             if np.sum(np.abs(s_anterior - s)) < tolerance:
+                smoothed_path.append(s[-1])
                 return smoothed_path
 
     def plot(
@@ -418,7 +423,7 @@ if __name__ == "__main__":
 
     # Create the roadmap
     start_time = time.perf_counter()
-    prm = PRM(map_path, use_grid=True, node_count=1000, grid_size=0.1, connection_distance=0.20)
+    prm = PRM(map_path, use_grid=False, node_count=500, grid_size=0.1, connection_distance=0.20)
     roadmap_creation_time = time.perf_counter() - start_time
 
     print(f"Roadmap creation time: {roadmap_creation_time:1.3f} s")
@@ -433,7 +438,7 @@ if __name__ == "__main__":
     # Smooth the path
     start_time = time.perf_counter()
     smoothed_path = prm.smooth_path(
-        path, data_weight=0.1, smooth_weight=0.1, additional_smoothing_points=3
+        path, data_weight=0.9, smooth_weight=0.5, additional_smoothing_points=3
     )
     smoothing_time = time.perf_counter() - start_time
 
