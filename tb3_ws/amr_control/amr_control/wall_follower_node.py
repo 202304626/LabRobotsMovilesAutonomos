@@ -187,6 +187,10 @@ class WallFollowerNode(LifecycleNode):
             pose_msg: Message containing the estimated robot pose.
 
         """
+        if self._stop_robot:
+            self._publish_velocity_commands(0.0, 0.0)
+            return
+
         if not pose_msg.localized:
             # TODO: 2.8. Parse the odometry from the Odometry message (i.e., read z_v and z_w).
 
