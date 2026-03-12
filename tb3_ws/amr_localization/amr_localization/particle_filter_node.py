@@ -195,16 +195,19 @@ class ParticleFilterNode(LifecycleNode):
 
         # c)
         if self._scan_last_measures:
-            x_h, y_h, theta_h = self._execute_measurement_step(self._scan_last_measures)        
+            x_h, y_h, theta_h = self._execute_measurement_step(self._scan_last_measures) 
+
         # d)
+        stop_msg = ControlStop()
+        stop_msg.stop = self._localized  # We set the stop condition to true if the robot is localized
+        stop_msg.header.stamp = self.get_clock().now().to_msg()  # We add the header (stamp)
+        self._stop_publisher.publish(stop_msg)  # We publish the stop
 
         # e) 
         if self._localized:
             x_h, y_h, theta_h = self._particle_filter.compute_pose()[1]
             self._publish_pose_estimate(x_h, y_h, theta_h)
         
-
-
 
 
     def _callback_scan_saving_history(self,scan_msg: LaserScan):
