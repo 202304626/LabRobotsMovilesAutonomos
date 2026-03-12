@@ -5,9 +5,9 @@ import math
 
 
 def generate_launch_description():
-    simulation = True
+    simulation = False  # physical robot
     world = "lab03"
-    start = (0.0, -0.8, math.radians(90))
+    dt = 0.05  # sampling period
     particles = 2000
     sigma_v = 0.05
     sigma_w = 0.1
@@ -40,18 +40,14 @@ def generate_launch_description():
         name="wall_follower",
         namespace="",
         output="screen",
-        arguments=["--ros-args", "--log-level", "WARN"],
-        parameters=[{"simulation": simulation}],
+        arguments=["--ros-args", "--log-level", "INFO"],
+        parameters=[{"simulation": simulation, "dt": dt}],
     )
 
-    coppeliasim_node = LifecycleNode(
-        package="amr_simulation",
-        executable="coppeliasim",
-        name="coppeliasim",
-        namespace="",
+    odometry_node = Node(
+        package="amr_turtlebot3",
+        executable="odometry_node",
         output="screen",
-        arguments=["--ros-args", "--log-level", "WARN"],
-        parameters=[{"enable_localization": True, "start": start}],
     )
 
     lifecycle_manager_node = Node(
@@ -64,7 +60,6 @@ def generate_launch_description():
                 "node_startup_order": (
                     "particle_filter",
                     "wall_follower",
-                    "coppeliasim",  # Must be started last
                 )
             }
         ],
@@ -74,7 +69,7 @@ def generate_launch_description():
         [
             particle_filter_node,
             wall_follower_node,
-            coppeliasim_node,
+            odometry_node,
             lifecycle_manager_node,  # Must be launched last
         ]
     )

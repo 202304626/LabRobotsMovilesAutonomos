@@ -184,22 +184,25 @@ class ParticleFilterNode(LifecycleNode):
 
         # a)
         stop_msg = ControlStop()
-        stop_msg.stop = self._localized  # We set the stop condition to true if the robot is localized
+        stop_msg.stop_robot = self._localized  # We set the stop condition to true if the robot is localized
         stop_msg.header.stamp = self.get_clock().now().to_msg()  # We add the header (stamp)
         self._stop_publisher.publish(stop_msg)  # We publish the stop
 
-        # b) 
-        for i in range(len(self._odometry_estimate_list)):
-            z_v, z_w = self._odometry_estimate_list[i]
+        # b)
+        odometry_estimates = list(self._odometry_estimate_list)
+        self._odometry_estimate_list.clear()
+        for z_v, z_w in odometry_estimates:
             self._execute_motion_step(z_v, z_w)
+            self._steps += 1
 
         # c)
         if self._scan_last_measures:
-            x_h, y_h, theta_h = self._execute_measurement_step(self._scan_last_measures) 
+            x_h, y_h, theta_h = self._execute_measurement_step(self._scan_last_measures)
+            self._scan_last_measures = []
 
         # d)
         stop_msg = ControlStop()
-        stop_msg.stop = self._localized  # We set the stop condition to true if the robot is localized
+        stop_msg.stop_robot = self._localized  # We set the stop condition to true if the robot is localized
         stop_msg.header.stamp = self.get_clock().now().to_msg()  # We add the header (stamp)
         self._stop_publisher.publish(stop_msg)  # We publish the stop
 
