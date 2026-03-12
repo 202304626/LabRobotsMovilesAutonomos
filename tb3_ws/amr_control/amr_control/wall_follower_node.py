@@ -29,6 +29,7 @@ class WallFollowerNode(LifecycleNode):
         self.declare_parameter("dt", 0.1)
         self.declare_parameter("enable_localization", False)
         self.declare_parameter("simulation", False)
+        self._stop_robot = False
 
     def on_configure(self, state: LifecycleState) -> TransitionCallbackReturn:
         """Handles a configuring transition.
@@ -129,7 +130,7 @@ class WallFollowerNode(LifecycleNode):
                 msg_type=ControlStop,
                 topic="stop_condition",
                 callback=self._compute_personalized_stop_callback,
-                qos_profile=10,
+                qos_profile=10
             )
 
         except Exception:

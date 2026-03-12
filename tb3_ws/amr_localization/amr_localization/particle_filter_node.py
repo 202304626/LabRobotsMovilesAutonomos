@@ -41,8 +41,8 @@ class ParticleFilterNode(LifecycleNode):
         self.declare_parameter("world", "lab03")
         
         # 3.11.3 Declare parameter for saving history
-        self._odometry_estimate_list = None
-        self._scan_last_measures = None
+        self._odometry_estimate_list = []
+        self._scan_last_measures = []
 
     def on_configure(self, state: LifecycleState) -> TransitionCallbackReturn:
         """Handles a configuring transition.
@@ -130,25 +130,37 @@ class ParticleFilterNode(LifecycleNode):
                 durability=QoSDurabilityPolicy.VOLATILE,
             )
 
-            self._subscribers: list[message_filters.Subscriber] = []
-            self._subscribers.append(
-                message_filters.Subscriber(self, Odometry, "odometry")
-            )
-            self._subscribers.append(
-                message_filters.Subscriber(
-                    self, LaserScan, "scan", qos_profile=scan_qos_profile
-                )
+            # #self._subscribers: list[message_filters.Subscriber] = []
+            # self._subscribers.append(
+            #     message_filters.Subscriber(self, Odometry, "odometry")
+            # )
+            # self._subscribers.append(
+            #     message_filters.Subscriber(
+            #         self, LaserScan, "scan", qos_profile=scan_qos_profile
+            #     )
+            # )
+
+            # ts = message_filters.ApproximateTimeSynchronizer(
+            #     self._subscribers, queue_size=10, slop=9
+            # )
+            # ts.registerCallback(self._compute_pose_callback)
+
+            self._scan_subscriber = self.create_subscription(
+                LaserScan, "scan", self._callback_scan_saving_history, scan_qos_profile
             )
 
-            ts = message_filters.ApproximateTimeSynchronizer(
-                self._subscribers, queue_size=10, slop=9
+            self._odometry_subscriber = self.create_subscription(
+                Odometry, "odometry", self._callback_odometry_saving_history, 10
             )
-            ts.registerCallback(self._compute_pose_callback)
 
             # 3.11.2 Create publisher for the stop condition
             self._stop_publisher = self.create_publisher(
                 ControlStop, "stop_condition", 10
             )
+
+            timer = self.create_timer(5, self._timer_callback)
+
+
 
         except Exception:
             self.get_logger().error(f"{traceback.format_exc()}")
@@ -166,6 +178,61 @@ class ParticleFilterNode(LifecycleNode):
         self.get_logger().info(f"Transitioning from '{state.label}' to 'active' state.")
 
         return super().on_activate(state)
+    
+    def _timer_callback(self):
+        """Timer callback to check the stop condition and publish it."""
+
+        # a)
+        stop_msg = ControlStop()
+        stop_msg.stop = self._localized  # We set the stop condition to true if the robot is localized
+        stop_msg.header.stamp = self.get_clock().now().to_msg()  # We add the header (stamp)
+        self._stop_publisher.publish(stop_msg)  # We publish the stop
+
+        # b) 
+        for i in range(len(self._odometry_estimate_list)):
+            z_v, z_w = self._odometry_estimate_list[i]
+            self._execute_motion_step(z_v, z_w)
+
+        # c)
+        if self._scan_last_measures:
+            x_h, y_h, theta_h = self._execute_measurement_step(self._scan_last_measures)        
+        # d)
+
+        # e) 
+        if self._localized:
+            x_h, y_h, theta_h = self._particle_filter.compute_pose()[1]
+            self._publish_pose_estimate(x_h, y_h, theta_h)
+        
+
+
+
+
+    def _callback_scan_saving_history(self,scan_msg: LaserScan):
+        """Subscriber callback. Executes a particle filter and publishes (x, y, theta) estimates.
+
+        Args:
+            scan_msg: Message containing LiDAR sensor readings.
+
+        """
+        # Parse measurements
+        z_scan = scan_msg.ranges
+
+        self._scan_last_measures = z_scan
+    
+    def _callback_odometry_saving_history(self, odom_msg: Odometry):
+        """Subscriber callback. Executes a particle filter and publishes (x, y, theta) estimates.
+
+        Args:
+            odom_msg: Message containing odometry measurements.
+
+        """
+        # Parse measurements
+        z_v = odom_msg.twist.twist.linear.x
+        z_w = odom_msg.twist.twist.angular.z
+
+        if abs(z_v) >= 1e-6 and abs(z_w) >= 1e-6:
+            self._odometry_estimate_list.append((z_v, z_w))
+        
 
     def _compute_pose_callback(self, odom_msg: Odometry, scan_msg: LaserScan):
         """Subscriber callback. Executes a particle filter and publishes (x, y, theta) estimates.
