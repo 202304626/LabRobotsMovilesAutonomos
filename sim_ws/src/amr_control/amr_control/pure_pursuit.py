@@ -1,3 +1,6 @@
+import numpy as np
+
+
 class PurePursuit:
     """Class to follow a path using a simple pure pursuit controller."""
 
@@ -22,7 +25,7 @@ class PurePursuit:
         self._lookahead_distance: float = lookahead_distance
         self._path: list[tuple[float, float]] = []
         self._simulation: bool = simulation
-        
+
     def compute_commands(self, x: float, y: float, theta: float) -> tuple[float, float]:
         """Pure pursuit controller implementation.
 
@@ -39,7 +42,7 @@ class PurePursuit:
         # TODO: 4.11. Complete the function body with your code (i.e., compute v and w).
         v = 0.0
         w = 0.0
-        
+
         return v, w
 
     @property
@@ -51,7 +54,7 @@ class PurePursuit:
     def path(self, value: list[tuple[float, float]]) -> None:
         """Path setter."""
         self._path = value
-        
+
     def _find_closest_point(self, x: float, y: float) -> tuple[tuple[float, float], int]:
         """Find the closest path point to the current robot pose.
 
@@ -68,8 +71,15 @@ class PurePursuit:
         closest_xy = (0.0, 0.0)
         closest_idx = 0
 
+        path = self._path
+        closest_xy = min(
+            path,
+            key=lambda point: np.linalg.norm(np.array(point) - np.array((x, y))),
+        )
+        closest_idx = path.index(closest_xy)
+
         return closest_xy, closest_idx
-        
+
     def _find_target_point(
         self, origin_xy: tuple[float, float], origin_idx: int
     ) -> tuple[float, float]:
@@ -87,4 +97,3 @@ class PurePursuit:
         target_xy = (0.0, 0.0)
 
         return target_xy
-        

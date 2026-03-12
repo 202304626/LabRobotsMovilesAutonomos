@@ -162,8 +162,27 @@ class PRM:
         """
         # TODO: 4.5. Complete the function body (i.e., load smoothed_path).
 
-        # Poner aqui algo de añadir en las esquinas, usar lo del area signada o algo del estilo
-        # de forma que añadamos solo en esquinas ya que realmente en lineas rectas es más irrelevante
+        ### Add additional points
+        if additional_smoothing_points > 0:
+            new_path = []
+            for i in range(len(path) - 1):
+                p_i = path[i]
+                p_next = path[i + 1]
+
+                new_path.append(p_i)
+
+                vector = np.array(p_next) - np.array(p_i)
+
+                for j in range(1, additional_smoothing_points + 1):
+                    intermediate_point = (
+                        p_i[0] + vector[0] * j / (additional_smoothing_points + 1),
+                        p_i[1] + vector[1] * j / (additional_smoothing_points + 1),
+                    )
+                    new_path.append(intermediate_point)
+
+            new_path.append(path[-1])
+
+            path = new_path
 
         smoothed_path: list[tuple[float, float]] = []
         s = np.array(path)
@@ -438,7 +457,7 @@ if __name__ == "__main__":
     # Smooth the path
     start_time = time.perf_counter()
     smoothed_path = prm.smooth_path(
-        path, data_weight=0.9, smooth_weight=0.5, additional_smoothing_points=3
+        path, data_weight=0.1, smooth_weight=0.1, additional_smoothing_points=3
     )
     smoothing_time = time.perf_counter() - start_time
 
