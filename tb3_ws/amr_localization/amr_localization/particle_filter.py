@@ -162,20 +162,22 @@ class ParticleFilter:
             noise_w = np.random.normal(loc=0, scale=self._sigma_w)
 
             # Proyect the velocities to the x,y axis (global world axis)
-            x_vel = np.cos(theta_o) * v
-            y_vel = np.sin(theta_o) * v
+            x_vel = np.cos(theta_o) * (v + noise_v)
+            y_vel = np.sin(theta_o) * (v + noise_v)
 
             # Update x,y,theta with noise
-            particle[0] += (x_vel + noise_v) * self._dt
-            particle[1] += (y_vel + noise_v) * self._dt
+            particle[0] += x_vel * self._dt
+            particle[1] += y_vel * self._dt
             particle[2] += (w + noise_w) * self._dt
 
             # Normalize to make sure that the angle is in range [0, 2*pi]
             particle[2] %= 2 * np.pi
 
             # Compute the intersection with the walls
-            colission_segment = [(particle[0], particle[1]), (x_o, y_o)]
-            colissions, _ = self._map.check_collision(segment=colission_segment)
+            colission_segment = [(x_o, y_o), (particle[0], particle[1])]
+            colissions, _ = self._map.check_collision(
+                segment=colission_segment, compute_distance=True
+            )
 
             if colissions:
                 # Readjust the position of the particle, to avoid traspassing the wall
@@ -189,30 +191,30 @@ class ParticleFilter:
             measurements: Sensor measurements [m].
 
         """
-        probabilities = [
-            self._measurement_probability(measurements, particle) for particle in self._particles
-        ]
+        probabilities = np.array(
+            [self._measurement_probability(measurements, particle) for particle in self._particles],
+            dtype=float,
+        )
         # dont forget that this is a likehood sum so we have to normalize in order to compare correctly
         total = sum(probabilities)
-
-        if total == 0.0:
-
-            probabilities = np.ones(self._particle_count) / self._particle_count
-        else:
-            probabilities = np.array(probabilities) / total
-
+        probabilities = probabilities / total
         n = self._particle_count
         rand_numbers = np.random.uniform(0, 1 / n) + np.arange(n) / n  # array of stratas
-        
         # we sum the weights in order to apply the  stratific samples
         weight_circle = np.cumsum(probabilities)
-        # we hoose the largest weight whose cumulative value does not exceed the strat.
-        weight_distances = weight_circle - rand_numbers.reshape(n, 1)
-        positive_weight_distances = np.where(weight_distances < 0, 1, weight_distances)
+        # we choose the largest weight whose cumulative value does not exceed the strat.
+        prominent_weights = np.digitize(rand_numbers, weight_circle)
+        prominent_weights = np.clip(prominent_weights, 0, len(self._particles) - 1)
 
-        prominent_weights = np.argmin(positive_weight_distances, axis=1)
+        # weight_distances = weight_circle - rand_numbers.reshape(n, 1)
+        # positive_weight_distances = np.where(weight_distances < 0, 1, weight_distances)
+
+        # prominent_weights = np.argmin(positive_weight_distances, axis=1)
 
         self._particles = self._particles[prominent_weights]
+
+        if self._logger is not None:
+            self._logger.warning(f"Ejecutando resample. Nº Particulas: {len(self._particles)}.")
 
         # TODO: 3.9. Complete the function body with your code (i.e., replace the pass statement).
 
@@ -363,12 +365,12 @@ class ParticleFilter:
         """
 
         # TODO: 3.6. Complete the missing function body with your code.
-        rays = range(0, 240, 240 // 8)
+        rays = np.arange(0, 240, 240 // 8).tolist()
 
-        measured_points = self._lidar_rays(pose=pose, indices=rays)
+        segments = self._lidar_rays(pose=pose, indices=rays)
 
         z_hat: list[float] = [
-            self._map.check_collision(segment=pair)[1] for pair in measured_points
+            self._map.check_collision(segment=pair, compute_distance=True)[1] for pair in segments
         ]
 
         return z_hat

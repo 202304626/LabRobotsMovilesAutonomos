@@ -73,7 +73,7 @@ class ParticleFilter:
         absolute_map_path = os.path.join(pkg_dir, "maps", map_filename)
 
         self._map = Map(
-            absolute_map_path,  # <--- Pasamos la ruta absoluta
+            absolute_map_path, 
             sensor_range_max,
             compiled_intersect=True,
             use_regions=False,

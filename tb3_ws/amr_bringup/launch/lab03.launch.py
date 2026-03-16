@@ -8,10 +8,10 @@ def generate_launch_description():
     simulation = False  # physical robot
     world = "lab03"
     dt = 0.05  # sampling period
-    particles = 1000
+    particles = 750
     sigma_v = 0.05
     sigma_w = 0.1
-    sigma_z = 0.8
+    sigma_z = 0.2
 
     particle_filter_node = LifecycleNode(
         package="amr_localization",
