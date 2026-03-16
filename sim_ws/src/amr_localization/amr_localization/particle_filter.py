@@ -73,7 +73,7 @@ class ParticleFilter:
         absolute_map_path = os.path.join(pkg_dir, "maps", map_filename)
 
         self._map = Map(
-            absolute_map_path, 
+            absolute_map_path,
             sensor_range_max,
             compiled_intersect=True,
             use_regions=False,
@@ -196,6 +196,8 @@ class ParticleFilter:
             measurements: Sensor measurements [m].
 
         """
+        # TODO: 3.9. Complete the function body with your code (i.e., replace the pass statement).
+
         probabilities = np.array(
             [self._measurement_probability(measurements, particle) for particle in self._particles],
             dtype=float,
@@ -205,23 +207,18 @@ class ParticleFilter:
         probabilities = probabilities / total
         n = self._particle_count
         rand_numbers = np.random.uniform(0, 1 / n) + np.arange(n) / n  # array of stratas
+
         # we sum the weights in order to apply the  stratific samples
         weight_circle = np.cumsum(probabilities)
+
         # we choose the largest weight whose cumulative value does not exceed the strat.
         prominent_weights = np.digitize(rand_numbers, weight_circle)
         prominent_weights = np.clip(prominent_weights, 0, len(self._particles) - 1)
-
-        # weight_distances = weight_circle - rand_numbers.reshape(n, 1)
-        # positive_weight_distances = np.where(weight_distances < 0, 1, weight_distances)
-
-        # prominent_weights = np.argmin(positive_weight_distances, axis=1)
 
         self._particles = self._particles[prominent_weights]
 
         if self._logger is not None:
             self._logger.warning(f"Ejecutando resample. Nº Particulas: {len(self._particles)}.")
-
-        # TODO: 3.9. Complete the function body with your code (i.e., replace the pass statement).
 
     def plot(self, axes, orientation: bool = True):
         """Draws particles.
@@ -395,7 +392,6 @@ class ParticleFilter:
         """
         # TODO: 3.7. Complete the function body (i.e., replace the code below).
         return np.exp(-0.5 * ((x - mu) / sigma) ** 2) / (sigma * np.sqrt(2 * np.pi))
-        # norm.pdf(x, mu, sigma)
 
     def _lidar_rays(
         self, pose: tuple[float, float, float], indices: tuple[float], degree_increment: float = 1.5
@@ -457,11 +453,6 @@ class ParticleFilter:
         for measurement, predicted_measurement in zip(
             subsampled_measurements, predicted_measurements
         ):
-            # if not np.isnan(measurement) and not np.isnan(predicted_measurement):
-            #     probability *= self._gaussian(
-            #         mu=measurement, sigma=self._sigma_z, x=predicted_measurement
-            #     )
-
             if np.isnan(measurement):
                 measurement = self._sensor_range_min
 
