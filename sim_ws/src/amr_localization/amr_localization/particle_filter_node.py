@@ -91,7 +91,7 @@ class ParticleFilterNode(LifecycleNode):
                 initial_pose=initial_pose,
                 initial_pose_sigma=initial_pose_sigma,
                 simulation=self._simulation,
-                logger=None,  # Replace None with self.get_logger() to enable logging in the class
+                logger=self.get_logger(),  # Replace None with self.get_logger() to enable logging in the class
             )
 
             if self._enable_plot:
