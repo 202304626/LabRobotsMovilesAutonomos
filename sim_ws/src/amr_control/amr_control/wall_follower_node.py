@@ -87,6 +87,12 @@ class WallFollowerNode(LifecycleNode):
                 message_filters.Subscriber(self, LaserScan, "scan", qos_profile=qos_lidar_profile)
             )
 
+            # TODO: 4.12. Add /pose to the synced subscriptions only if localization is enabled.
+            if enable_localization:
+                self._subscribers.append(
+                    message_filters.Subscriber(self, PoseStamped, "pose", qos_profile=10)
+                )
+
             # We wait until we receive all the measurements, and then we invoke the callback
             ts = message_filters.ApproximateTimeSynchronizer(
                 self._subscribers,
@@ -96,8 +102,6 @@ class WallFollowerNode(LifecycleNode):
 
             # We register the callback that we want to execute once the measurements are received
             ts.registerCallback(self._compute_commands_callback)
-
-            # TODO: 4.12. Add /pose to the synced subscriptions only if localization is enabled.
 
         except Exception:
             self.get_logger().error(f"{traceback.format_exc()}")

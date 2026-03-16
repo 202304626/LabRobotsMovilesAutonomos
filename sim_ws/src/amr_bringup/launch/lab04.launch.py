@@ -10,7 +10,7 @@ def generate_launch_description():
     start = (-1.0, -1.0, math.radians(90))
     goal = (-0.6, 1.0)
 
-    particles = 100
+    particles = 50
     global_localization = False
     start_sigma = (0.1, 0.1, math.radians(5))
     sigma_v = 0.05
@@ -46,7 +46,7 @@ def generate_launch_description():
         name="probabilistic_roadmap",
         namespace="",
         output="screen",
-        arguments=["--ros-args", "--log-level", "INFO"],
+        arguments=["--ros-args", "--log-level", "WARN"],
         parameters=[
             {
                 "connection_distance": 0.15,  # 0.3,
@@ -54,7 +54,7 @@ def generate_launch_description():
                 "goal": goal,
                 "grid_size": 0.1,
                 "node_count": 250,
-                "obstacle_safety_distance": 0.12,  # 0.08,
+                "obstacle_safety_distance": 0.20,  # 0.08,
                 "simulation": simulation,
                 "smoothing_additional_points": 3,
                 "smoothing_data_weight": 0.1,

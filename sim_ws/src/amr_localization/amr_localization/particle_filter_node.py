@@ -120,8 +120,6 @@ class ParticleFilterNode(LifecycleNode):
             )
             ts.registerCallback(self._compute_pose_callback)
 
-            # 3.11.2 Create publisher for the stop condition
-
         except Exception:
             self.get_logger().error(f"{traceback.format_exc()}")
             return TransitionCallbackReturn.ERROR

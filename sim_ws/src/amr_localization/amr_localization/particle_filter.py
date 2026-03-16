@@ -138,7 +138,7 @@ class ParticleFilter:
 
             pose = (x_mean, y_mean, theta_mean)
 
-            self._particle_count = 100
+            self._particle_count = 50
 
         elif n_clusters > 1:
             self._particle_count = max(int(100 * n_clusters), 100)

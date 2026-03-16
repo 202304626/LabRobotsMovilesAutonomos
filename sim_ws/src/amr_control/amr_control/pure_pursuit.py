@@ -120,6 +120,9 @@ class PurePursuit:
             if (
                 dist_act >= self._lookahead_distance
             ):  # When distance is greater than or equal to the lookahead distance, we have found the target point
+                return path[i]
+
+                """
                 if i == origin_idx:
                     return path[i]
 
@@ -143,6 +146,7 @@ class PurePursuit:
                 target_xy = (target_x, target_y)
 
                 return target_xy
+                """
 
         if path:
             return path[-1]
