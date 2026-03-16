@@ -161,7 +161,21 @@ class PRMNode(LifecycleNode):
 
         msg = Path()
         msg.header.stamp = self.get_clock().now().to_msg()
-        msg.poses = path
+        msg.header.frame_id = "map"
+
+        poses_list = []
+
+        for point in path:
+            pose_msg = PoseStamped()
+            pose_msg.header = msg.header
+
+            pose_msg.pose.position.x = float(point[0])
+            pose_msg.pose.position.y = float(point[1])
+            pose_msg.pose.position.z = 0.0
+
+            poses_list.append(pose_msg)
+
+        msg.poses = poses_list
 
         self._path_publisher.publish(msg)
 

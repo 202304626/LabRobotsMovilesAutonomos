@@ -9,6 +9,9 @@ from amr_localization.maps import Map
 from matplotlib import pyplot as plt
 from sklearn.cluster import DBSCAN
 
+# added
+from ament_index_python.packages import get_package_share_directory
+
 
 class ParticleFilter:
     """Particle filter implementation."""
@@ -58,7 +61,26 @@ class ParticleFilter:
         self._sigma_z: float = sigma_z
         self._simulation: bool = simulation
         self._iteration: int = 0
+        #######################################
+        # Obtenemos la ruta absoluta al archivo del mapa de forma segura
+        pkg_dir = get_package_share_directory("amr_localization")
 
+        # OJO: Asumimos que map_path viene solo con el nombre del archivo (ej: "project.json")
+        # Si map_path ya trae "maps/project.json", puedes usar os.path.basename(map_path)
+        # para quedarte solo con el nombre y que el join no falle.
+        # Por seguridad, usaremos os.path.basename:
+        map_filename = os.path.basename(map_path)
+        absolute_map_path = os.path.join(pkg_dir, "maps", map_filename)
+
+        self._map = Map(
+            absolute_map_path,  # <--- Pasamos la ruta absoluta
+            sensor_range_max,
+            compiled_intersect=False,
+            use_regions=False,
+            safety_distance=0.08,
+        )
+        ##############################################
+        """
         self._map = Map(
             map_path,
             sensor_range_max,
@@ -66,6 +88,7 @@ class ParticleFilter:
             use_regions=False,
             safety_distance=0.08,
         )
+        """
         self._particles = self._init_particles(
             particle_count, global_localization, initial_pose, initial_pose_sigma
         )
