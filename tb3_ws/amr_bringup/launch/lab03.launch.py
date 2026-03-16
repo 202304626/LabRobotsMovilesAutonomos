@@ -8,10 +8,10 @@ def generate_launch_description():
     simulation = False  # physical robot
     world = "lab03"
     dt = 0.05  # sampling period
-    particles = 2000
+    particles = 1000
     sigma_v = 0.05
     sigma_w = 0.1
-    sigma_z = 0.2
+    sigma_z = 0.8
 
     particle_filter_node = LifecycleNode(
         package="amr_localization",
@@ -19,7 +19,7 @@ def generate_launch_description():
         name="particle_filter",
         namespace="",
         output="screen",
-        arguments=["--ros-args", "--log-level", "WARN"],
+        arguments=["--ros-args", "--log-level", "INFO"],
         parameters=[
             {
                 "enable_plot": True,
@@ -54,7 +54,7 @@ def generate_launch_description():
         package="amr_bringup",
         executable="lifecycle_manager",
         output="screen",
-        arguments=["--ros-args", "--log-level", "WARN"],
+        arguments=["--ros-args", "--log-level", "INFO"],
         parameters=[
             {
                 "node_startup_order": (

@@ -5,6 +5,8 @@ import numpy as np
 import os
 import platform
 
+import matplotlib
+matplotlib.use("Agg")
 from matplotlib import pyplot as plt
 from shapely.geometry import Point
 from shapely.geometry.polygon import Polygon, LineString

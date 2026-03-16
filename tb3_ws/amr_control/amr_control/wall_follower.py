@@ -78,7 +78,7 @@ class WallFollower:
         """
  
         # TODO: 2.14. Complete the function body with your code (i.e., compute v and w).
-        self._logger.info(f"************************** Nº NANS: {sum(isinstance(v, float) and math.isnan(v) for v in z_scan)}")
+        # self._logger.info(f"************************** Nº NANS: {sum(isinstance(v, float) and math.isnan(v) for v in z_scan)}")
  
         self._front_dist = z_scan[-1] # Front distance
         self._right_dist = z_scan[3 * len(z_scan) // 4] # Right distance
@@ -175,11 +175,11 @@ class WallFollower:
             self._state = states.Turn_Right
             self._followed_wall = "left"
         
-        self._logger.info(f"Left: {self._left_dist}")
-        self._logger.info(f"Right: {self._right_dist}")
-        self._logger.info(f"Front: {self._front_dist}")
-        self._logger.info(f"Diff: {diff}")
-        self._logger.info(f">>>>>>>>>>>>> STATE: {self._state}\n")
+        #self._logger.info(f"Left: {self._left_dist}")
+        #self._logger.info(f"Right: {self._right_dist}")
+        #self._logger.info(f"Front: {self._front_dist}")
+        #self._logger.info(f"Diff: {diff}")
+        #self._logger.info(f">>>>>>>>>>>>> STATE: {self._state}\n")
             
 
     def _handle_turn_right(self):
@@ -254,12 +254,12 @@ class WallFollower:
 
         if value < 0:
             w = max(value, -0.34)
-            self._logger.info(f"Value of W: {w}")
+            #self._logger.info(f"Value of W: {w}")
             return w
 
         else:
             w = min(value, 0.34)
-            self._logger.info(f"Value of W: {w}")
+            #self._logger.info(f"Value of W: {w}")
             return w
 
     def _handle_fixed_front(self):

@@ -6,6 +6,8 @@ import pytz
 import random
 from scipy.stats import norm
 from amr_localization.maps import Map
+import matplotlib
+matplotlib.use("Agg")
 from matplotlib import pyplot as plt
 from sklearn.cluster import DBSCAN
 
@@ -90,7 +92,7 @@ class ParticleFilter:
         localized = False
         pose = (float("nan"), float("nan"), float("nan"))
 
-        particles_projected = np.array(self._particles).copy()
+        particles_projected = np.array(self._particles, dtype=float).copy()
 
         theta = particles_projected[:, -1]
 
@@ -108,14 +110,14 @@ class ParticleFilter:
         if n_clusters == 1:
             localized = True
             
-            cluster_particles = self._particles[indexes]
+            cluster_particles = np.array(self._particles[indexes], dtype=float)
 
             x_mean = np.mean(cluster_particles[:, 0])
             y_mean = np.mean(cluster_particles[:, 1])
 
             theta_mean = math.atan2(
                 np.mean(np.sin(cluster_particles[:, -1])),
-                np.mean(np.cos(cluster_particles[:, -2]))
+                np.mean(np.cos(cluster_particles[:, -1])) 
             ) % (2 * math.pi)
 
             pose = (x_mean, y_mean, theta_mean)
@@ -125,6 +127,17 @@ class ParticleFilter:
         elif n_clusters > 1:
             self._particle_count = max(int(50 * n_clusters), 50)
 
+        if self._logger:
+            if localized:
+                self._logger.warning(
+                    f"✅ [DBSCAN] LOCALIZADO! Clústeres: {n_clusters}. "
+                    f"Pose: X={pose[0]:.2f}, Y={pose[1]:.2f}, Theta={pose[2]:.2f} rad"
+                )
+            else:
+                self._logger.warning(
+                    f"⏳ [DBSCAN] Buscando... Clústeres: {n_clusters}. Partículas: {self._particle_count}"
+                )
+                
         return localized, pose
 
     def move(self, v: float, w: float) -> None:
@@ -181,9 +194,16 @@ class ParticleFilter:
         ]
         # dont forget that this is a likehood sum so we have to normalize in order to compare correctly
         total = sum(probabilities)
-        probabilities = probabilities / total
+
+        if total == 0.0:
+
+            probabilities = np.ones(self._particle_count) / self._particle_count
+        else:
+            probabilities = np.array(probabilities) / total
+
         n = self._particle_count
         rand_numbers = np.random.uniform(0, 1 / n) + np.arange(n) / n  # array of stratas
+        
         # we sum the weights in order to apply the  stratific samples
         weight_circle = np.cumsum(probabilities)
         # we hoose the largest weight whose cumulative value does not exceed the strat.
@@ -292,7 +312,7 @@ class ParticleFilter:
         Returns: A NumPy array of tuples (x, y, theta) [m, m, rad].
 
         """
-        particles = np.empty((particle_count, 3), dtype=object)
+        particles = np.empty((particle_count, 3), dtype=float)
 
         # TODO: 3.4. Complete the missing function body with your code.
 
@@ -367,7 +387,7 @@ class ParticleFilter:
 
         """
         # TODO: 3.7. Complete the function body (i.e., replace the code below).
-        return norm.pdf(x, mu, sigma)
+        return math.exp(-0.5 * ((x - mu) / sigma) ** 2) / (sigma * math.sqrt(2 * math.pi))
 
     def _lidar_rays(
         self, pose: tuple[float, float, float], indices: tuple[float], degree_increment: float = 1.5
@@ -422,16 +442,22 @@ class ParticleFilter:
         # TODO: 3.8. Complete the missing function body with your code.
 
         probability = 1.0
-
         predicted_measurements = self._sense(pose=particle)
+
         rays = range(0, 240, 240 // 8)
         subsampled_measurements = [measurements[i] for i in rays]
+        
         for measurement, predicted_measurement in zip(
             subsampled_measurements, predicted_measurements
         ):
-            if not np.isnan(measurement) and not np.isnan(predicted_measurement):
-                probability *= self._gaussian(
-                    mu=measurement, sigma=self._sigma_z, x=predicted_measurement
-                )
+            if math.isinf(measurement) or math.isnan(measurement) or measurement <= 0.0:
+                measurement = self._sensor_range_min
+                
+            if math.isinf(predicted_measurement) or math.isnan(predicted_measurement):
+                predicted_measurement = self._sensor_range_max
+
+            probability *= self._gaussian(
+                mu=measurement, sigma=self._sigma_z, x=predicted_measurement
+            )
 
         return probability
