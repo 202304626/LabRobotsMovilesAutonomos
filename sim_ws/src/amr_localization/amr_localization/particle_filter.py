@@ -75,7 +75,7 @@ class ParticleFilter:
         self._map = Map(
             absolute_map_path,  # <--- Pasamos la ruta absoluta
             sensor_range_max,
-            compiled_intersect=False,
+            compiled_intersect=True,
             use_regions=False,
             safety_distance=0.08,
         )
@@ -180,7 +180,9 @@ class ParticleFilter:
 
             # Compute the intersection with the walls
             colission_segment = [(x_o, y_o), (particle[0], particle[1])]
-            colissions, _ = self._map.check_collision(segment=colission_segment)
+            colissions, _ = self._map.check_collision(
+                segment=colission_segment, compute_distance=True
+            )
 
             if colissions:
                 # Readjust the position of the particle, to avoid traspassing the wall
@@ -194,9 +196,10 @@ class ParticleFilter:
             measurements: Sensor measurements [m].
 
         """
-        probabilities = [
-            self._measurement_probability(measurements, particle) for particle in self._particles
-        ]
+        probabilities = np.array(
+            [self._measurement_probability(measurements, particle) for particle in self._particles],
+            dtype=float,
+        )
         # dont forget that this is a likehood sum so we have to normalize in order to compare correctly
         total = sum(probabilities)
         probabilities = probabilities / total
@@ -206,6 +209,7 @@ class ParticleFilter:
         weight_circle = np.cumsum(probabilities)
         # we choose the largest weight whose cumulative value does not exceed the strat.
         prominent_weights = np.digitize(rand_numbers, weight_circle)
+        prominent_weights = np.clip(prominent_weights, 0, len(self._particles) - 1)
 
         # weight_distances = weight_circle - rand_numbers.reshape(n, 1)
         # positive_weight_distances = np.where(weight_distances < 0, 1, weight_distances)
@@ -315,7 +319,7 @@ class ParticleFilter:
         Returns: A NumPy array of tuples (x, y, theta) [m, m, rad].
 
         """
-        particles = np.empty((particle_count, 3), dtype=object)
+        particles = np.empty((particle_count, 3), dtype=float)
 
         # TODO: 3.4. Complete the missing function body with your code.
 
@@ -366,12 +370,12 @@ class ParticleFilter:
         """
 
         # TODO: 3.6. Complete the missing function body with your code.
-        rays = range(0, 240, 240 // 8)
+        rays = np.arange(0, 240, 240 // 8).tolist()
 
-        measured_points = self._lidar_rays(pose=pose, indices=rays)
+        segments = self._lidar_rays(pose=pose, indices=rays)
 
         z_hat: list[float] = [
-            self._map.check_collision(segment=pair)[1] for pair in measured_points
+            self._map.check_collision(segment=pair, compute_distance=True)[1] for pair in segments
         ]
 
         return z_hat
