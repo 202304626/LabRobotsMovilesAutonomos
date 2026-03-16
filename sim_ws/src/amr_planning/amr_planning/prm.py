@@ -14,6 +14,9 @@ except ImportError:
 from matplotlib import pyplot as plt
 
 
+from ament_index_python.packages import get_package_share_directory
+
+
 class PRM:
     """Class to plan a path to a given destination using probabilistic roadmaps (PRM)."""
 
@@ -44,6 +47,26 @@ class PRM:
             simulation: True if running in simulation, False if running on the real robot.
 
         """
+        #################################################################
+        # Obtenemos la ruta absoluta al archivo del mapa de forma segura
+        pkg_dir = get_package_share_directory("amr_localization")
+
+        # OJO: Asumimos que map_path viene solo con el nombre del archivo (ej: "project.json")
+        # Si map_path ya trae "maps/project.json", puedes usar os.path.basename(map_path)
+        # para quedarte solo con el nombre y que el join no falle.
+        # Por seguridad, usaremos os.path.basename:
+        map_filename = os.path.basename(map_path)
+        absolute_map_path = os.path.join(pkg_dir, "maps", map_filename)
+
+        self._map = Map(
+            absolute_map_path,  # <--- Pasamos la ruta absoluta
+            sensor_range_max,
+            compiled_intersect=False,
+            use_regions=False,
+            safety_distance=0.08,
+        )
+        #############################################################
+        """
         self._map: Map = Map(
             map_path,
             sensor_range=sensor_range_max,
@@ -51,6 +74,7 @@ class PRM:
             compiled_intersect=False,
             use_regions=False,
         )
+        """
 
         self._graph: dict[tuple[float, float], list[tuple[float, float]]] = self._create_graph(
             use_grid,
@@ -442,7 +466,7 @@ if __name__ == "__main__":
 
     # Create the roadmap
     start_time = time.perf_counter()
-    prm = PRM(map_path, use_grid=False, node_count=500, grid_size=0.1, connection_distance=0.20)
+    prm = PRM(map_path, use_grid=True, node_count=500, grid_size=0.1, connection_distance=0.20)
     roadmap_creation_time = time.perf_counter() - start_time
 
     print(f"Roadmap creation time: {roadmap_creation_time:1.3f} s")

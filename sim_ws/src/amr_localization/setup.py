@@ -1,3 +1,6 @@
+from glob import glob
+import os
+
 from setuptools import setup
 
 package_name = "amr_localization"
@@ -9,6 +12,8 @@ setup(
     data_files=[
         ("share/ament_index/resource_index/packages", ["resource/" + package_name]),
         ("share/" + package_name, ["package.xml"]),
+        # AÑADE ESTA LÍNEA (Asegúrate de que la ruta 'maps/*.json' coincida con tu carpeta src)
+        (os.path.join("share", package_name, "maps"), glob("maps/*.json")),
     ],
     install_requires=["setuptools"],
     zip_safe=True,
