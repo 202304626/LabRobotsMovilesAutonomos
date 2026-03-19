@@ -49,12 +49,12 @@ def generate_launch_description():
         arguments=["--ros-args", "--log-level", "WARN"],
         parameters=[
             {
-                "connection_distance": 0.15,  # 0.3,
+                "connection_distance": 0.20,  # 0.3,
                 "enable_plot": True,
                 "goal": goal,
                 "grid_size": 0.1,
                 "node_count": 250,
-                "obstacle_safety_distance": 0.20,  # 0.08,
+                "obstacle_safety_distance": 0.12,  # 0.08,
                 "simulation": simulation,
                 "smoothing_additional_points": 3,
                 "smoothing_data_weight": 0.1,

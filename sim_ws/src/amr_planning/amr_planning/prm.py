@@ -61,9 +61,9 @@ class PRM:
         self._map = Map(
             absolute_map_path,  # <--- Pasamos la ruta absoluta
             sensor_range_max,
-            compiled_intersect=False,
+            compiled_intersect=True,
             use_regions=False,
-            safety_distance=0.08,
+            safety_distance=obstacle_safety_distance,
         )
         #############################################################
         """
@@ -119,10 +119,12 @@ class PRM:
 
         # Find the closest nodes in the graph to the start and goal locations
         closest_start_node = min(
-            self._graph.keys(), key=lambda node: np.linalg.norm(np.array(node) - np.array(start))
+            self._graph.keys(),
+            key=lambda node: np.linalg.norm(np.array(node) - np.array(start)),
         )
         closest_goal_node = min(
-            self._graph.keys(), key=lambda node: np.linalg.norm(np.array(node) - np.array(goal))
+            self._graph.keys(),
+            key=lambda node: np.linalg.norm(np.array(node) - np.array(goal)),
         )
 
         ancestors[goal] = closest_goal_node
@@ -408,7 +410,8 @@ class PRM:
 
         if use_grid:
             grid = np.mgrid[
-                x_min : x_max + grid_size : grid_size, y_min : y_max + grid_size : grid_size
+                x_min : x_max + grid_size : grid_size,
+                y_min : y_max + grid_size : grid_size,
             ]
             for x in grid[0].flat:
                 for y in grid[1].flat:
@@ -466,7 +469,14 @@ if __name__ == "__main__":
 
     # Create the roadmap
     start_time = time.perf_counter()
-    prm = PRM(map_path, use_grid=True, node_count=500, grid_size=0.1, connection_distance=0.20)
+    prm = PRM(
+        map_path,
+        use_grid=True,
+        node_count=500,
+        grid_size=0.1,
+        connection_distance=0.20,
+        obstacle_safety_distance=0.12,
+    )
     roadmap_creation_time = time.perf_counter() - start_time
 
     print(f"Roadmap creation time: {roadmap_creation_time:1.3f} s")
@@ -481,7 +491,7 @@ if __name__ == "__main__":
     # Smooth the path
     start_time = time.perf_counter()
     smoothed_path = prm.smooth_path(
-        path, data_weight=0.1, smooth_weight=0.1, additional_smoothing_points=3
+        path, data_weight=0.1, smooth_weight=0.1, additional_smoothing_points=4
     )
     smoothing_time = time.perf_counter() - start_time
 
