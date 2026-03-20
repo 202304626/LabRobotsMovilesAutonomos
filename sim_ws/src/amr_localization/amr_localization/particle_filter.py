@@ -61,6 +61,9 @@ class ParticleFilter:
         self._sigma_z: float = sigma_z
         self._simulation: bool = simulation
         self._iteration: int = 0
+
+        self._localized_particle_count: int = 25
+
         #######################################
         # Obtenemos la ruta absoluta al archivo del mapa de forma segura
         pkg_dir = get_package_share_directory("amr_localization")
@@ -79,16 +82,7 @@ class ParticleFilter:
             use_regions=False,
             safety_distance=0.08,
         )
-        ##############################################
-        """
-        self._map = Map(
-            map_path,
-            sensor_range_max,
-            compiled_intersect=True,
-            use_regions=False,
-            safety_distance=0.08,
-        )
-        """
+
         self._particles = self._init_particles(
             particle_count, global_localization, initial_pose, initial_pose_sigma
         )
@@ -138,7 +132,7 @@ class ParticleFilter:
 
             pose = (x_mean, y_mean, theta_mean)
 
-            self._particle_count = 50
+            self._particle_count = self._localized_particle_count
 
         elif n_clusters > 1:
             self._particle_count = max(int(100 * n_clusters), 100)
@@ -218,7 +212,8 @@ class ParticleFilter:
         self._particles = self._particles[prominent_weights]
 
         if self._logger is not None:
-            self._logger.warning(f"Ejecutando resample. Nº Particulas: {len(self._particles)}.")
+            # self._logger.warning(f"Ejecutando resample. Nº Particulas: {len(self._particles)}.")
+            pass
 
     def plot(self, axes, orientation: bool = True):
         """Draws particles.

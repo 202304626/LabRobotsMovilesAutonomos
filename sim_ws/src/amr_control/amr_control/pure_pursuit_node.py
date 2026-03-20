@@ -44,7 +44,7 @@ class PurePursuitNode(LifecycleNode):
                 dt,
                 lookahead_distance,
                 simulation=self._simulation,
-                logger=None,  # Replace None with self.get_logger() to enable logging in the class
+                logger=self.get_logger(),  # Replace None with self.get_logger() to enable logging in the class
             )
 
             # Publishers
