@@ -124,7 +124,12 @@ class WallFollowerNode(LifecycleNode):
 
 
             # TODO: 4.12. Add /pose to the synced subscriptions only if localization is enabled.
-            
+            if enable_localization:
+                self._subscribers.append(
+                    message_filters.Subscriber(
+                        self, PoseStamped, "pose", qos_profile=10
+                    )
+                )
             # Create 3.11.2 Subscriber for the personalized topic
             self._personalized_subscriber = self.create_subscription(
                 msg_type=ControlStop,
