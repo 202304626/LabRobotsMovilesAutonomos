@@ -45,12 +45,7 @@ class OdometryPubSub(Node):
                 dx = x - self._prev_x
                 dy = y - self._prev_y
 
-                # Project displacement from global onto the robot heading
-                avg_theta = (self._prev_theta + theta) / 2.0
-                v = (
-                    dx * math.cos(avg_theta)
-                    + dy * math.sin(avg_theta)
-                ) / dt
+                v = math.sqrt(dx * dx + dy * dy) / dt
 
                 # Angular velocity: derivative of orientation
                 dtheta = math.atan2(
@@ -59,17 +54,21 @@ class OdometryPubSub(Node):
                 )
                 w = dtheta / dt
 
+                # w = (theta - self._prev_theta) / dt
+
                 # Fill in the twist fields of the original message
-                msg.twist.twist.linear.x = v
+                msg.twist.twist.linear.x = float(v)
                 msg.twist.twist.linear.y = 0.0
                 msg.twist.twist.linear.z = 0.0
 
                 msg.twist.twist.angular.x = 0.0
                 msg.twist.twist.angular.y = 0.0
-                msg.twist.twist.angular.z = w
+                msg.twist.twist.angular.z = float(w)
 
                 # Publish on /odometry
                 self._odom_publisher.publish(msg)
+
+                self.get_logger().warn(f"Odometry: z_v = {v:.3f} m/s, z_w = {w:.3f} rad/s")
 
                 #self.get_logger().info('I publish v linear: "%s"' % msg.twist.twist.linear.x)
                 #self.get_logger().info('I publish w angular: "%s"' % msg.twist.twist.angular.z)

@@ -100,6 +100,12 @@ class WallFollowerNode(LifecycleNode):
                 )
             )
 
+            # TODO: 4.12. Add /pose to the synced subscriptions only if localization is enabled.
+            if enable_localization:
+                self._subscribers.append(
+                    message_filters.Subscriber(self, PoseStamped, "pose", qos_profile=10)
+                )
+
             # We wait until we receive all the measurements, and then we invoke the callback
             ts = message_filters.ApproximateTimeSynchronizer(
                 self._subscribers,

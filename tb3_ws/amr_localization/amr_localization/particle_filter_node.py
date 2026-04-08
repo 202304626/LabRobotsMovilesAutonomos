@@ -60,7 +60,8 @@ class ParticleFilterNode(LifecycleNode):
             self._odometry_estimate_list = []
 
             # Parameters
-            dt = self.get_parameter("dt").get_parameter_value().double_value
+            self.dt = self.get_parameter("dt").get_parameter_value().double_value
+             #dt = self.dt
             self._enable_plot = (
                 self.get_parameter("enable_plot").get_parameter_value().bool_value
             )
@@ -98,11 +99,16 @@ class ParticleFilterNode(LifecycleNode):
             # Attribute and object initializations
             self._localized = False
             self._steps = 0
+            # new
+            self._predicted_x = 0.0
+            self._predicted_y = 0.0
+            self._predicted_theta = 0.0
+            ############
             map_path = os.path.realpath(
                 os.path.join(os.path.dirname(__file__), "..", "maps", world + ".json")
             )
             self._particle_filter = ParticleFilter(
-                dt,
+                self.dt,
                 map_path,
                 particle_count=particles,
                 sigma_v=sigma_v,
@@ -130,6 +136,21 @@ class ParticleFilterNode(LifecycleNode):
                 durability=QoSDurabilityPolicy.VOLATILE,
             )
 
+            # #self._subscribers: list[message_filters.Subscriber] = []
+            # self._subscribers.append(
+            #     message_filters.Subscriber(self, Odometry, "odometry")
+            # )
+            # self._subscribers.append(
+            #     message_filters.Subscriber(
+            #         self, LaserScan, "scan", qos_profile=scan_qos_profile
+            #     )
+            # )
+
+            # ts = message_filters.ApproximateTimeSynchronizer(
+            #     self._subscribers, queue_size=10, slop=9
+            # )
+            # ts.registerCallback(self._compute_pose_callback)
+
             self._scan_subscriber = self.create_subscription(
                 LaserScan, "scan", self._callback_scan_saving_history, scan_qos_profile
             )
@@ -143,7 +164,10 @@ class ParticleFilterNode(LifecycleNode):
                 ControlStop, "stop_condition", 10
             )
 
-            timer = self.create_timer(5, self._timer_callback)
+            self._timer = self.create_timer(2.0, self._timer_callback)
+
+            self._last_pose = (0.0, 0.0, 0.0)
+            self._prev_odom_time: float | None = None
 
 
 
@@ -167,6 +191,7 @@ class ParticleFilterNode(LifecycleNode):
     def _timer_callback(self):
         """Timer callback to check the stop condition and publish it."""
 
+        # self.get_logger().info(f"a)")
         # a)
         stop_msg = ControlStop()
         stop_msg.stop_robot = True  # We set the stop condition to true if the robot is localized
@@ -175,12 +200,12 @@ class ParticleFilterNode(LifecycleNode):
         
         # b)
         odometry_estimates = list(self._odometry_estimate_list)
-
-        self._odometry_estimate_list.clear()
+        # self.get_logger().info(f"b) {odometry_estimates}, {len(odometry_estimates)}")
         for z_v, z_w in odometry_estimates:
             self._execute_motion_step(z_v, z_w)
             self._steps += 1
         self.get_logger().info(f"b) {self._steps}")
+        self._odometry_estimate_list.clear()
 
         # c)
         x_h, y_h, theta_h = 0.0, 0.0, 0.0
@@ -188,16 +213,22 @@ class ParticleFilterNode(LifecycleNode):
            x_h, y_h, theta_h = self._execute_measurement_step(self._scan_last_measures)
            self._scan_last_measures = []
 
+
         # d)
         stop_msg = ControlStop()
-        stop_msg.stop_robot = self._localized  # We set the stop condition to true if the robot is localized
+        stop_msg.stop_robot = False  # We set the stop condition to true if the robot is localized
         stop_msg.header.stamp = self.get_clock().now().to_msg()  # We add the header (stamp)
         self._stop_publisher.publish(stop_msg)  # We publish the stop
 
         # e)
-        if self._localized:
-            x_h, y_h, theta_h = self._particle_filter.compute_pose()[1]
-            self._publish_pose_estimate(x_h, y_h, theta_h)
+        self._localized, (x_h, y_h, theta_h) = self._particle_filter.compute_pose()
+        self._predicted_x = x_h
+        self._predicted_y = y_h
+        self._predicted_theta = theta_h
+        self._last_pose = (x_h, y_h, theta_h)
+        self._publish_pose_estimate(self._last_pose[0], self._last_pose[1], self._last_pose[2])
+        
+        self._timer.reset()
             
 
     def _compute_pose_callback(self, odom_msg: Odometry, scan_msg: LaserScan):
@@ -234,10 +265,13 @@ class ParticleFilterNode(LifecycleNode):
         """
         pose = (float("inf"), float("inf"), float("inf"))
 
+        # if self._localized or not self._steps % self._steps_btw_sense_updates:
         start_time = time.perf_counter()
-
+        ## here? publish?
         self._particle_filter.resample(z_scan)
         sense_time = time.perf_counter() - start_time
+
+        # self.get_logger().info(f"Sense step time: {sense_time:6.3f} s")
 
         if self._enable_plot:
             self._particle_filter.show("Sense", save_figure=True, display = True)
@@ -260,6 +294,11 @@ class ParticleFilterNode(LifecycleNode):
         start_time = time.perf_counter()
         self._particle_filter.move(z_v, z_w)
         move_time = time.perf_counter() - start_time
+
+        # self.get_logger().info(f"Move step time: {move_time:7.3f} s")
+
+        # if self._enable_plot:
+        #     self._particle_filter.show("Move", save_figure=True)
 
     def _publish_pose_estimate(self, x_h: float, y_h: float, theta_h: float) -> None:
         """Publishes the robot's pose estimate in a custom amr_msgs.msg.PoseStamped message.
@@ -321,9 +360,25 @@ class ParticleFilterNode(LifecycleNode):
         z_v: float = odom_msg.twist.twist.linear.x
         z_w: float = odom_msg.twist.twist.angular.z
 
-        if abs(z_v) >= 1e-6 or abs(z_w) >= 1e-6:
+        if abs(z_v) >= 0.01 or abs(z_w) >= 0.06:
             self._odometry_estimate_list.append((z_v, z_w))
+            # self.get_logger().warn(f"z_v = {z_v:.3f}, z_w = {z_w:.3f}")
 
+        t = odom_msg.header.stamp.sec + odom_msg.header.stamp.nanosec * 1e-9
+        if self._localized and self._prev_odom_time is not None:
+            actual_dt = t - self._prev_odom_time
+            
+            self._predicted_x += z_v * math.cos(self._predicted_theta) * actual_dt
+            self._predicted_y += z_v * math.sin(self._predicted_theta) * actual_dt
+            self._predicted_theta += z_w * actual_dt
+            self._predicted_theta %= 2 * math.pi
+            self._publish_pose_estimate(
+                self._predicted_x, self._predicted_y, self._predicted_theta
+            )
+
+            # self.get_logger().warn(f"Odom estimate: {self._predicted_x:.2f}, {self._predicted_y:.2f}, {math.degrees(self._predicted_theta):.2f}")
+        
+        self._prev_odom_time = t
         
 def main(args=None):
     rclpy.init(args=args)

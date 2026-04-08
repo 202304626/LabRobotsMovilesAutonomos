@@ -127,12 +127,15 @@ class ParticleFilter:
         elif n_clusters > 1:
             self._particle_count = max(int(50 * n_clusters), 50)
 
+        #print(localized, flush=True)
+        
         if self._logger:
             if localized:
-                self._logger.warning(
+                pass
+                """self._logger.warning(
                     f"✅ [DBSCAN] LOCALIZADO! Clústeres: {n_clusters}. "
                     f"Pose: X={pose[0]:.2f}, Y={pose[1]:.2f}, Theta={pose[2]:.2f} rad"
-                )
+                )"""
             else:
                 self._logger.warning(
                     f"⏳ [DBSCAN] Buscando... Clústeres: {n_clusters}. Partículas: {self._particle_count}"
@@ -176,7 +179,7 @@ class ParticleFilter:
             # Compute the intersection with the walls
             colission_segment = [(x_o, y_o), (particle[0], particle[1])]
             colissions, _ = self._map.check_collision(
-                segment=colission_segment, compute_distance=True
+                segment=colission_segment, compute_distance=False
             )
 
             if colissions:
@@ -192,12 +195,20 @@ class ParticleFilter:
 
         """
         probabilities = np.array(
-            [self._measurement_probability(measurements, particle) for particle in self._particles],
-            dtype=float,
-        )
-        # dont forget that this is a likehood sum so we have to normalize in order to compare correctly
-        total = sum(probabilities)
-        probabilities = probabilities / total
+    [self._measurement_probability(measurements, particle) for particle in self._particles],
+    dtype=float,
+)
+
+# Limpiar NaN e inf
+        probabilities = np.nan_to_num(probabilities, nan=0.0, posinf=0.0, neginf=0.0)
+
+        total = np.sum(probabilities)
+
+        # Si todos los pesos son 0 o inválidos, usar distribución uniforme
+        if total <= 0.0 or not np.isfinite(total):
+            probabilities = np.ones(len(self._particles), dtype=float) / len(self._particles)
+        else:
+            probabilities = probabilities / total
         n = self._particle_count
         rand_numbers = np.random.uniform(0, 1 / n) + np.arange(n) / n  # array of stratas
         # we sum the weights in order to apply the  stratific samples
@@ -446,7 +457,9 @@ class ParticleFilter:
         probability = 1.0
         predicted_measurements = self._sense(pose=particle)
 
-        rays = range(0, 240, 240 // 8)
+        n = len(measurements)
+        rays = range(0,n,max(n//8,1))
+        # rays = range(0, 240, 240 // 8)
         subsampled_measurements = [measurements[i] for i in rays]
         
         for measurement, predicted_measurement in zip(
