@@ -5,17 +5,18 @@ import math
 
 
 def generate_launch_description():
-    simulation = True
+    simulation = False
     world = "project"
     start = (-1.0, -1.0, math.radians(90))
     goal = (-0.6, 1.0)
+    dt = 0.05  # sampling period
 
-    particles = 100
+    particles = 50
     global_localization = False
-    start_sigma = (0.1, 0.1, math.radians(5))
-    sigma_v = 0.05
-    sigma_w = 0.1
-    sigma_z = 0.2
+    start_sigma = (0.05, 0.05, math.radians(5))
+    sigma_v = 0.1
+    sigma_w = 0.25
+    sigma_z = 0.15
 
     particle_filter_node = LifecycleNode(
         package="amr_localization",
@@ -26,7 +27,7 @@ def generate_launch_description():
         arguments=["--ros-args", "--log-level", "WARN"],
         parameters=[
             {
-                "enable_plot": False,
+                "enable_plot": True,
                 "global_localization": global_localization,
                 "initial_pose": start,
                 "initial_pose_sigma": start_sigma,
@@ -46,17 +47,17 @@ def generate_launch_description():
         name="probabilistic_roadmap",
         namespace="",
         output="screen",
-        arguments=["--ros-args", "--log-level", "INFO"],
+        arguments=["--ros-args", "--log-level", "WARN"],
         parameters=[
             {
-                "connection_distance": 0.15,  # 0.3,
+                "connection_distance": 0.3,  # 0.3,
                 "enable_plot": True,
                 "goal": goal,
-                "grid_size": 0.1,
-                "node_count": 250,
-                "obstacle_safety_distance": 0.12,  # 0.08,
+                "grid_size": 0.2,
+                "node_count": 500,
+                "obstacle_safety_distance": 0.15,  # 0.08,
                 "simulation": simulation,
-                "smoothing_additional_points": 3,
+                "smoothing_additional_points": 3, #3,
                 "smoothing_data_weight": 0.1,
                 "smoothing_smooth_weight": 0.25,
                 "use_grid": True,
@@ -74,27 +75,16 @@ def generate_launch_description():
         arguments=["--ros-args", "--log-level", "WARN"],
         parameters=[
             {
-                "lookahead_distance": 0.3,
+                "lookahead_distance": 0.25,
                 "simulation": simulation,
             }
         ],
     )
 
-    coppeliasim_node = LifecycleNode(
-        package="amr_simulation",
-        executable="coppeliasim",
-        name="coppeliasim",
-        namespace="",
+    odometry_node = Node(
+        package="amr_turtlebot3",
+        executable="odometry_node",
         output="screen",
-        arguments=["--ros-args", "--log-level", "WARN"],
-        parameters=[
-            {
-                "enable_localization": True,
-                "goal": goal,
-                "pose_tolerance": (0.1, 10.0),
-                "start": start,
-            }
-        ],
     )
 
     lifecycle_manager_node = Node(
@@ -105,10 +95,9 @@ def generate_launch_description():
         parameters=[
             {
                 "node_startup_order": (
-                    "particle_filter",
                     "probabilistic_roadmap",
+                    "particle_filter",
                     "pure_pursuit",
-                    "coppeliasim",  # Must be started last
                 )
             }
         ],
@@ -116,10 +105,10 @@ def generate_launch_description():
 
     return LaunchDescription(
         [
-            particle_filter_node,
+            odometry_node,
             probabilistic_roadmap_node,
+            particle_filter_node,
             pure_pursuit_node,
-            coppeliasim_node,
             lifecycle_manager_node,  # Must be launched last
         ]
     )
