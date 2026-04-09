@@ -106,6 +106,24 @@ class ParticleFilter:
         labels = clustering.labels_
         n_clusters = len(set(labels) - {-1})
         indexes = clustering.core_sample_indices_
+        self._logger.warning(f"Number of clusters: {n_clusters}")
+        for cluster_id in set(labels):
+            if cluster_id == -1:
+                continue  # ignorar ruido
+
+            cluster_points = np.array(self._particles)[labels == cluster_id]
+
+            centroid_x = np.mean(cluster_points[:, 0])
+            centroid_y = np.mean(cluster_points[:, 1])
+
+            self._logger.warning(
+                f"Cluster {cluster_id} -> centroid: ({centroid_x:.3f}, {centroid_y:.3f})"
+            )
+
+            self._logger.warning(
+                f"Cluster {cluster_id} -> particle count: {len(cluster_points)}"
+            )
+
 
         if n_clusters == 1:
             localized = True
@@ -199,7 +217,6 @@ class ParticleFilter:
     dtype=float,
 )
 
-# Limpiar NaN e inf
         probabilities = np.nan_to_num(probabilities, nan=0.0, posinf=0.0, neginf=0.0)
 
         total = np.sum(probabilities)
@@ -462,17 +479,62 @@ class ParticleFilter:
         # rays = range(0, 240, 240 // 8)
         subsampled_measurements = [measurements[i] for i in rays]
         
-        for measurement, predicted_measurement in zip(
-            subsampled_measurements, predicted_measurements
-        ):
+        n = len(measurements)
+        step = max(n // 8, 1)
+        rays = list(range(0, n, step))
+
+        for i, (ray_idx, predicted_measurement) in enumerate(zip(rays, predicted_measurements)):
+            measurement = measurements[ray_idx]
+
+            # --- FIX measurement ---
             if math.isinf(measurement) or math.isnan(measurement) or measurement <= 0.0:
-                measurement = self._sensor_range_min
-                
-            if math.isinf(predicted_measurement) or math.isnan(predicted_measurement):
-                predicted_measurement = self._sensor_range_max
+                neighbor_indices = [
+                    j for j in range(ray_idx - 2, ray_idx + 3)
+                    if 0 <= j < n and j != ray_idx
+                ]
+
+                valid_neighbors = [
+                    measurements[j]
+                    for j in neighbor_indices
+                    if not math.isinf(measurements[j])
+                    and not math.isnan(measurements[j])
+                    and measurements[j] > 0.0
+                ]
+
+                if valid_neighbors:
+                    measurement = max(valid_neighbors)
+                else:
+                    continue
+
+            # --- FIX predicted_measurement ---
+            if (
+                math.isinf(predicted_measurement)
+                or math.isnan(predicted_measurement)
+                or predicted_measurement <= 0.0
+            ):
+                pred_neighbor_indices = [
+                    j for j in range(i - 2, i + 3)
+                    if 0 <= j < len(predicted_measurements) and j != i
+                ]
+
+                valid_pred_neighbors = [
+                    predicted_measurements[j]
+                    for j in pred_neighbor_indices
+                    if not math.isinf(predicted_measurements[j])
+                    and not math.isnan(predicted_measurements[j])
+                    and predicted_measurements[j] > 0.0
+                ]
+
+                if valid_pred_neighbors:
+                    predicted_measurement = max(valid_pred_neighbors)
+                else:
+                    continue
 
             probability *= self._gaussian(
-                mu=measurement, sigma=self._sigma_z, x=predicted_measurement
+                mu=measurement,
+                sigma=self._sigma_z,
+                x=predicted_measurement,
             )
+
 
         return probability

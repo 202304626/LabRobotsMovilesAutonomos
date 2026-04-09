@@ -1,5 +1,5 @@
 import numpy as np
-
+import math
 
 class PurePursuit:
     """Class to follow a path using a simple pure pursuit controller."""
@@ -28,36 +28,53 @@ class PurePursuit:
 
     def compute_commands(self, x: float, y: float, theta: float) -> tuple[float, float]:
         if not self._path or len(self._path) == 0:
+            # Si no hay ruta, velocidad 0 y giro 0
             return 0.0, 0.0
-
-        _, closest_idx = self._find_closest_point(x, y)
-        target = self._find_target_point((x, y), closest_idx)
-
-        dx = target[0] - x
-        dy = target[1] - y
-        l = np.hypot(dx, dy)
-
-        if l < 1e-6:
-            return 0.0, 0.0
-
-        raw_alpha = np.arctan2(dy, dx) - theta
-        alpha = (raw_alpha + np.pi) % (2 * np.pi) - np.pi
-
-        v_nominal = 0.08
-        v_min = 0.05
-        w_max = 0.5
-        angle_stop = np.pi / 3
-
-        
-
-        v = max(v_min, v_nominal * (1.0 - abs(alpha) / angle_stop))
-
+ 
+        # here we are going to apply the pure suit formula to get angular vel
+        L = self._find_target_point((x, y), self._find_closest_point(x, y)[1])
+ 
+        vector_to_target = np.array(L) - np.array((x, y))
+        l = np.linalg.norm(vector_to_target)
+ 
+        raw_alpha = np.arctan2(vector_to_target[1], vector_to_target[0]) - theta
+        alpha = (raw_alpha + np.pi) % (2 * np.pi) - np.pi  # Normalize to [-pi, pi]
+ 
+        """if self._logger is not None:
+            self._logger.warning(
+                f"Robot pose: x = {x:.3f} m, y = {y:.3f} m, theta = {theta:.3f} rad"
+            )"""
+ 
+        ## OPTIMIZACION
+        # Config params
+        v_min = 0.10  # constant velocity, we change it later but rn constant
+        v_max = 0.22  # max v vel
+        max_angle = math.radians(20)   # max angle
+ 
+        if (
+            abs(alpha) > max_angle
+        ):  # if the angle is too big, we can not try to go making the circle
+            # Turn in place with max angular velocity, alpha = beta - theta, if alpha positive we need left turn, if negative right turn, this in sim, in real change dirs
+            w = 0.5 * np.sign(alpha)
+            return 0.0, w
+ 
+        # Calculate v
+        v_desired = v_max * (
+            1
+            - abs(alpha)
+            / max_angle  # alpha lower than max_angle, then abs(alpha) / max_angle < 1, so we reduce the speed, if alpha is 0, we can go at max speed
+        )  # Reduce speed as alpha increases, control in curves
+ 
+        v = max(v_min, min(v_desired, v_max))  # Clamp v to [v_min, v_max]
         v = 0.1
-
-        w = 2.0 * v * np.sin(alpha) / max(l, self._lookahead_distance)
-        # w = float(np.clip(w, -w_max, w_max))
-
-        return float(v), +w
+ 
+        w = (
+            v * 2 * np.sin(alpha) / l  # subsitute r in the formula
+            if l > 0
+            else 0.0  # if sin alpha is 0, we can go straight, if l is 0, we are at the target.
+        )
+ 
+        return v, w
 
     @property
     def path(self) -> list[tuple[float, float]]:

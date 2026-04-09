@@ -68,7 +68,7 @@ class OdometryPubSub(Node):
                 # Publish on /odometry
                 self._odom_publisher.publish(msg)
 
-                self.get_logger().warn(f"Odometry: z_v = {v:.3f} m/s, z_w = {w:.3f} rad/s")
+                # self.get_logger().warn(f"Odometry: z_v = {v:.3f} m/s, z_w = {w:.3f} rad/s")
 
                 #self.get_logger().info('I publish v linear: "%s"' % msg.twist.twist.linear.x)
                 #self.get_logger().info('I publish w angular: "%s"' % msg.twist.twist.angular.z)

@@ -345,6 +345,10 @@ class ParticleFilterNode(LifecycleNode):
         """
         # Parse measurements
         z_scan: list[float] = scan_msg.ranges
+        nan_count = sum(math.isnan(x) for x in z_scan)
+        if nan_count > 15:
+
+            self.get_logger().warn(f"nan lidar rays: {nan_count}")
 
         self._scan_last_measures = z_scan
     

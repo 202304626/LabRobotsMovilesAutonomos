@@ -192,6 +192,7 @@ class WallFollower:
  
     def _handle_turn_left(self):
         if self._state == states.Turn_Left:
+        
             return (
                 0.0,
                 0.37,

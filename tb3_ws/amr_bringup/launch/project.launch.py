@@ -5,7 +5,7 @@ from launch_ros.actions import LifecycleNode, Node
 def generate_launch_description():
     simulation = False
     world = "project"
-    goal = (-0.6, 1.0)
+    goal = (1.0, 1.0)
 
     particle_filter_node = LifecycleNode(
         package="amr_localization",
@@ -16,14 +16,15 @@ def generate_launch_description():
         arguments=["--ros-args", "--log-level", "WARN"],
         parameters=[
             {
-                "enable_plot": False,
+                "enable_plot": True,
                 "global_localization": True,
                 "particles": 2000,
-                "sigma_v": 0.05,
-                "sigma_w": 0.1,
-                "sigma_z": 0.2,
+                "sigma_v": 0.1,
+                "sigma_w": 0.25,
+                "sigma_z": 0.15,
                 "simulation": simulation,
                 "world": world,
+
             }
         ],
     )
@@ -37,10 +38,10 @@ def generate_launch_description():
         arguments=["--ros-args", "--log-level", "WARN"],
         parameters=[
             {
-                "connection_distance": 0.15,
-                "enable_plot": False,
+                "connection_distance": 0.3,
+                "enable_plot": True,
                 "goal": goal,
-                "grid_size": 0.1,
+                "grid_size": 0.2,
                 "node_count": 250,
                 "obstacle_safety_distance": 0.12,
                 "simulation": simulation,
@@ -53,11 +54,9 @@ def generate_launch_description():
         ],
     )
 
-    odometry_node = LifecycleNode(
+    odometry_node = Node(
         package="amr_turtlebot3",
-        executable="odometry",
-        name="odometry",
-        namespace="",
+        executable="odometry_node",
         output="screen",
         arguments=["--ros-args", "--log-level", "INFO"],
     )
@@ -117,7 +116,6 @@ def generate_launch_description():
                 "node_startup_order": (
                     "particle_filter",
                     "probabilistic_roadmap",
-                    "odometry",
                     "wall_follower",
                     "pure_pursuit",
                     "monitoring",
@@ -129,11 +127,11 @@ def generate_launch_description():
     return LaunchDescription(
         [
             particle_filter_node,
-            probabilistic_roadmap_node,
             odometry_node,
             wall_follower_node,
             pure_pursuit_node,
             monitoring_node,
+            probabilistic_roadmap_node,
             lifecycle_manager_node,  # Must be launched last
         ]
     )

@@ -115,7 +115,7 @@ class PurePursuitNode(LifecycleNode):
 
             # Execute pure pursuit
             v, w = self._pure_pursuit.compute_commands(x, y, theta)
-            self.get_logger().warning(f"Commands: v = {v:.3f} m/s, w = {w:+.3f} rad/s")
+            #self.get_logger().warning(f"Commands: v = {v:.3f} m/s, w = {w:+.3f} rad/s")
             # self._logger.warning(f"Actual Pose (x,y,theta): {x:.2f}, {y:.2f}, {math.degrees(theta):.1f}.")
 
             # Publish
