@@ -7,8 +7,8 @@ import math
 def generate_launch_description():
     simulation = True
     world = "project"
-    start = (-1, -1, math.radians(0))
-    goal = (-1.0, -1.0)
+    start = (-1, -1, math.radians(90))
+    goal = (-0.6, 1.0)
 
     particle_filter_node = LifecycleNode(
         package="amr_localization",

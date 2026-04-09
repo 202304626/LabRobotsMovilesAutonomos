@@ -73,13 +73,10 @@ class PurePursuit:
             return 0.0, w
 
         # Calculate v
-        v_desired = (
-            v_max
-            * (
-                1
-                - abs(alpha)
-                / max_angle  # alpha lower than max_angle, then abs(alpha) / max_angle < 1, so we reduce the speed, if alpha is 0, we can go at max speed
-            )
+        v_desired = v_max * (
+            1
+            - abs(alpha)
+            / max_angle  # alpha lower than max_angle, then abs(alpha) / max_angle < 1, so we reduce the speed, if alpha is 0, we can go at max speed
         )  # Reduce speed as alpha increases, control in curves
 
         v = max(v_min, min(v_desired, v_max))  # Clamp v to [v_min, v_max]
@@ -102,7 +99,9 @@ class PurePursuit:
         """Path setter."""
         self._path = value
 
-    def _find_closest_point(self, x: float, y: float) -> tuple[tuple[float, float], int]:
+    def _find_closest_point(
+        self, x: float, y: float
+    ) -> tuple[tuple[float, float], int]:
         """Find the closest path point to the current robot pose.
 
         Args:
@@ -150,7 +149,6 @@ class PurePursuit:
 
         """
         # TODO: 4.10. Complete the function body with your code (i.e., determine target_xy).
-        target_xy = (0.0, 0.0)
         path = np.array(self._path)
         np_origin_xy = np.array(origin_xy)
 
@@ -159,7 +157,9 @@ class PurePursuit:
         ]  # Get the future path points starting from the closest point
 
         if len(future_path) == 0:
-            return tuple(path[-1])  # If no future points, return the last point in the path
+            return tuple(
+                path[-1]
+            )  # If no future points, return the last point in the path
 
         dx = future_path[:, 0] - origin_xy[0]
         dy = future_path[:, 1] - origin_xy[1]
@@ -173,7 +173,9 @@ class PurePursuit:
                 future_path[idxs[0]]
             )  # Return the first point that is at least lookahead distance away
 
-        return tuple(path[-1])  # If no point is far enough, return the last point in the path
+        return tuple(
+            path[-1]
+        )  # If no point is far enough, return the last point in the path
 
         # _, idx_closest_node_robot_path = self._find_closest_point(origin_xy[0], origin_xy[1])
 
