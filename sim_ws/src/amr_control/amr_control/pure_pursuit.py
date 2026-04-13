@@ -26,6 +26,8 @@ class PurePursuit:
         self._path: list[tuple[float, float]] = []
         self._simulation: bool = simulation
 
+        self._is_aligned = False
+
     def compute_commands(self, x: float, y: float, theta: float) -> tuple[float, float]:
         """Pure pursuit controller implementation.
 
@@ -65,18 +67,27 @@ class PurePursuit:
         v_max = 0.22  # max v vel
         max_angle = np.pi / 3.5  # max angle
 
-        if (
-            abs(alpha) > max_angle
-        ):  # if the angle is too big, we can not try to go making the circle
-            # Turn in place with max angular velocity, alpha = beta - theta, if alpha positive we need left turn, if negative right turn, this in sim, in real change dirs
-            w = 0.5 * np.sign(alpha)
-            return 0.0, w
+        if not hasattr(self, "_is_aligned"):
+            self._is_aligned = False
+
+        if not self._is_aligned:
+            if (
+                abs(alpha) > max_angle
+            ):  # if the angle is too big, we can not try to go making the circle
+                # Turn in place with max angular velocity, alpha = beta - theta, if alpha positive we need left turn, if negative right turn, this in sim, in real change dirs
+                w = 0.5 * np.sign(alpha)
+                return 0.0, w
+            else:
+                self._is_aligned = True  # we are aligned, we can start moving forward
 
         # Calculate v
-        v_desired = v_max * (
-            1
-            - abs(alpha)
-            / max_angle  # alpha lower than max_angle, then abs(alpha) / max_angle < 1, so we reduce the speed, if alpha is 0, we can go at max speed
+        v_desired = (
+            v_max
+            * (
+                1
+                - abs(alpha)
+                / max_angle  # alpha lower than max_angle, then abs(alpha) / max_angle < 1, so we reduce the speed, if alpha is 0, we can go at max speed
+            )
         )  # Reduce speed as alpha increases, control in curves
 
         v = max(v_min, min(v_desired, v_max))  # Clamp v to [v_min, v_max]
@@ -98,10 +109,9 @@ class PurePursuit:
     def path(self, value: list[tuple[float, float]]) -> None:
         """Path setter."""
         self._path = value
+        self._is_aligned = False  # reset alignment when a new path is set
 
-    def _find_closest_point(
-        self, x: float, y: float
-    ) -> tuple[tuple[float, float], int]:
+    def _find_closest_point(self, x: float, y: float) -> tuple[tuple[float, float], int]:
         """Find the closest path point to the current robot pose.
 
         Args:
@@ -157,9 +167,7 @@ class PurePursuit:
         ]  # Get the future path points starting from the closest point
 
         if len(future_path) == 0:
-            return tuple(
-                path[-1]
-            )  # If no future points, return the last point in the path
+            return tuple(path[-1])  # If no future points, return the last point in the path
 
         dx = future_path[:, 0] - origin_xy[0]
         dy = future_path[:, 1] - origin_xy[1]
@@ -173,9 +181,7 @@ class PurePursuit:
                 future_path[idxs[0]]
             )  # Return the first point that is at least lookahead distance away
 
-        return tuple(
-            path[-1]
-        )  # If no point is far enough, return the last point in the path
+        return tuple(path[-1])  # If no point is far enough, return the last point in the path
 
         # _, idx_closest_node_robot_path = self._find_closest_point(origin_xy[0], origin_xy[1])
 
