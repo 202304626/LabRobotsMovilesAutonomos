@@ -153,13 +153,15 @@ class ParticleFilter:
         # We assume that v and w are measured with respect of the robot
 
         # Vectorized motion update
-        n = self._particle_count
+        n = self._particles.shape[0]
+
         noise_v = np.random.normal(0, self._sigma_v, n)
         noise_w = np.random.normal(0, self._sigma_w, n)
 
-        x_o = self._particles[:, 0]
-        y_o = self._particles[:, 1]
-        theta_o = self._particles[:, 2]
+        # FIX 2: Use .copy() so these don't update when you modify self._particles
+        x_o = self._particles[:, 0].copy()
+        y_o = self._particles[:, 1].copy()
+        theta_o = self._particles[:, 2]  # Doesn't strictly need .copy() here, but good practice
 
         v_eff = v + noise_v
         x_vel = np.cos(theta_o) * v_eff
@@ -169,9 +171,7 @@ class ParticleFilter:
         self._particles[:, 1] += y_vel * self._dt
         self._particles[:, 2] = (theta_o + (w + noise_w) * self._dt) % (2 * np.pi)
 
-        # Check collision using map bounds if compiled_intersect raycasting per particle is too slow,
-        # but to maintain semantics we must check segment collisions for each particle.
-        # Vectorizing the segment check is harder, we'll keep a loop for collisions for now.
+        # Collision check loop will now use the true old positions
         for i in range(n):
             segment = [(x_o[i], y_o[i]), (self._particles[i, 0], self._particles[i, 1])]
             collisions, _ = self._map.check_collision(segment, compute_distance=True)
