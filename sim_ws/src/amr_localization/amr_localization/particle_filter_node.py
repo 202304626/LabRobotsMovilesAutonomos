@@ -10,6 +10,7 @@ from rclpy.qos import (
 
 import message_filters
 from amr_msgs.msg import PoseStamped
+from geometry_msgs.msg import PoseWithCovarianceStamped
 from nav_msgs.msg import Odometry
 from sensor_msgs.msg import LaserScan
 
@@ -101,6 +102,7 @@ class ParticleFilterNode(LifecycleNode):
             # Publishers
             # TODO: 3.1. Create the /pose publisher (PoseStamped message).
             self._pose_publisher = self.create_publisher(PoseStamped, "pose", 10)
+            self._pose_cov_publisher = self.create_publisher(PoseWithCovarianceStamped, "pose_cov", 10)
 
             # Subscribers
             scan_qos_profile = QoSProfile(
@@ -230,6 +232,17 @@ class ParticleFilterNode(LifecycleNode):
             msg.pose.orientation.x = x
             msg.pose.orientation.y = y
             msg.pose.orientation.z = z
+
+            # Create PoseWithCovarianceStamped for robot_localization EKF
+            msg_cov = PoseWithCovarianceStamped()
+            msg_cov.header = msg.header
+            msg_cov.header.frame_id = "map"
+            msg_cov.pose.pose = msg.pose
+            # Assign small covariance since the robot is localized
+            msg_cov.pose.covariance[0] = 0.05   # x
+            msg_cov.pose.covariance[7] = 0.05   # y
+            msg_cov.pose.covariance[35] = 0.05  # yaw
+            self._pose_cov_publisher.publish(msg_cov)
 
         self._pose_publisher.publish(msg)  # We publish the msg
 

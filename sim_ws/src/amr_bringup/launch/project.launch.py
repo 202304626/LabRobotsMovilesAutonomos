@@ -1,5 +1,7 @@
 from launch import LaunchDescription
 from launch_ros.actions import LifecycleNode, Node
+from launch.substitutions import PathJoinSubstitution
+from launch_ros.substitutions import FindPackageShare
 
 import math
 
@@ -86,6 +88,18 @@ def generate_launch_description():
         ],
     )
 
+    ekf_node = Node(
+        package="robot_localization",
+        executable="ekf_node",
+        name="ekf_filter_node",
+        output="screen",
+        parameters=[
+            PathJoinSubstitution(
+                [FindPackageShare("amr_bringup"), "config", "ekf.yaml"]
+            )
+        ],
+    )
+
     coppeliasim_node = LifecycleNode(
         package="amr_simulation",
         executable="coppeliasim",
@@ -127,6 +141,7 @@ def generate_launch_description():
             probabilistic_roadmap_node,
             wall_follower_node,
             pure_pursuit_node,
+            ekf_node,
             coppeliasim_node,
             lifecycle_manager_node,  # Must be launched last
         ]

@@ -3,7 +3,7 @@ from rclpy.lifecycle import LifecycleNode, LifecycleState, TransitionCallbackRet
 
 from amr_msgs.msg import PoseStamped
 from geometry_msgs.msg import TwistStamped
-from nav_msgs.msg import Path
+from nav_msgs.msg import Path, Odometry
 
 import math
 import traceback
@@ -48,6 +48,7 @@ class PurePursuitNode(LifecycleNode):
             )
 
             self.current_pose = None
+            self.current_odom_filtered = None
             self._timer = self.create_timer(dt, self._control_loop_callback)
 
             # Publishers
@@ -56,6 +57,9 @@ class PurePursuitNode(LifecycleNode):
             # Subscribers
             self._subscriber_pose = self.create_subscription(
                 PoseStamped, "pose", self._pose_callback, 10
+            )
+            self._subscriber_odom = self.create_subscription(
+                Odometry, "odometry/filtered", self._odom_filtered_callback, 10
             )
             self._subscriber_path = self.create_subscription(Path, "path", self._path_callback, 10)
 
@@ -85,6 +89,10 @@ class PurePursuitNode(LifecycleNode):
         """
         self.current_pose = pose_msg
 
+    def _odom_filtered_callback(self, odom_msg: Odometry):
+        """Subscriber callback for the EKF filtered odometry."""
+        self.current_odom_filtered = odom_msg
+
     def _control_loop_callback(self):
         """Timer callback. Executes a pure pursuit controller and publishes v and w commands.
 
@@ -92,13 +100,23 @@ class PurePursuitNode(LifecycleNode):
 
         """
         if self.current_pose is not None and self.current_pose.localized:
-            # Parse pose
-            x = self.current_pose.pose.position.x
-            y = self.current_pose.pose.position.y
-            quat_w = self.current_pose.pose.orientation.w
-            quat_x = self.current_pose.pose.orientation.x
-            quat_y = self.current_pose.pose.orientation.y
-            quat_z = self.current_pose.pose.orientation.z
+            # Prefer the high-frequency EKF output if available
+            if self.current_odom_filtered is not None:
+                x = self.current_odom_filtered.pose.pose.position.x
+                y = self.current_odom_filtered.pose.pose.position.y
+                quat_w = self.current_odom_filtered.pose.pose.orientation.w
+                quat_x = self.current_odom_filtered.pose.pose.orientation.x
+                quat_y = self.current_odom_filtered.pose.pose.orientation.y
+                quat_z = self.current_odom_filtered.pose.pose.orientation.z
+            else:
+                # Fallback to the raw particle filter pose
+                x = self.current_pose.pose.position.x
+                y = self.current_pose.pose.position.y
+                quat_w = self.current_pose.pose.orientation.w
+                quat_x = self.current_pose.pose.orientation.x
+                quat_y = self.current_pose.pose.orientation.y
+                quat_z = self.current_pose.pose.orientation.z
+
             _, _, theta = quat2euler((quat_w, quat_x, quat_y, quat_z))
             theta %= 2 * math.pi
 
