@@ -229,7 +229,6 @@ class ParticleFilter:
         """Samples a new set of particles using Batch C++ Raycasting."""
         self._iteration += 1
         n = self._particles.shape[0]
-        from amr_localization import amr_localization_cpp
 
         # 1. Definimos los índices de los rayos que queremos usar
         ray_indices = list(range(0, 240, 240 // 8))

@@ -102,7 +102,9 @@ class ParticleFilterNode(LifecycleNode):
             # Publishers
             # TODO: 3.1. Create the /pose publisher (PoseStamped message).
             self._pose_publisher = self.create_publisher(PoseStamped, "pose", 10)
-            self._pose_cov_publisher = self.create_publisher(PoseWithCovarianceStamped, "pose_cov", 10)
+            self._pose_cov_publisher = self.create_publisher(
+                PoseWithCovarianceStamped, "pose_cov", 10
+            )
 
             # Subscribers
             scan_qos_profile = QoSProfile(
@@ -239,8 +241,8 @@ class ParticleFilterNode(LifecycleNode):
             msg_cov.header.frame_id = "map"
             msg_cov.pose.pose = msg.pose
             # Assign small covariance since the robot is localized
-            msg_cov.pose.covariance[0] = 0.05   # x
-            msg_cov.pose.covariance[7] = 0.05   # y
+            msg_cov.pose.covariance[0] = 0.05  # x
+            msg_cov.pose.covariance[7] = 0.05  # y
             msg_cov.pose.covariance[35] = 0.05  # yaw
             self._pose_cov_publisher.publish(msg_cov)
 

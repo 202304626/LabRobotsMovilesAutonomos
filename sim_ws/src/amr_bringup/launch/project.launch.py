@@ -121,9 +121,9 @@ def generate_launch_description():
         parameters=[
             {
                 "node_startup_order": (
-                    "particle_filter",
                     "probabilistic_roadmap",
                     "wall_follower",
+                    "particle_filter",
                     "pure_pursuit",
                     "coppeliasim",  # Must be started last
                 )
