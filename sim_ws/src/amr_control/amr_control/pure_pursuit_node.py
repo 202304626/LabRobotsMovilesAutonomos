@@ -47,12 +47,15 @@ class PurePursuitNode(LifecycleNode):
                 logger=self.get_logger(),  # Replace None with self.get_logger() to enable logging in the class
             )
 
+            self.current_pose = None
+            self._timer = self.create_timer(dt, self._control_loop_callback)
+
             # Publishers
             self._publisher = self.create_publisher(TwistStamped, "cmd_vel", 10)
 
             # Subscribers
             self._subscriber_pose = self.create_subscription(
-                PoseStamped, "pose", self._compute_commands_callback, 10
+                PoseStamped, "pose", self._pose_callback, 10
             )
             self._subscriber_path = self.create_subscription(Path, "path", self._path_callback, 10)
 
@@ -73,23 +76,29 @@ class PurePursuitNode(LifecycleNode):
 
         return super().on_activate(state)
 
-    def _compute_commands_callback(self, pose_msg: PoseStamped):
-        """Subscriber callback. Executes a pure pursuit controller and publishes v and w commands.
-
-        Starts to operate once the robot is localized.
+    def _pose_callback(self, pose_msg: PoseStamped):
+        """Subscriber callback. Updates the current robot pose.
 
         Args:
             pose_msg: Message containing the estimated robot pose.
 
         """
-        if pose_msg.localized:
+        self.current_pose = pose_msg
+
+    def _control_loop_callback(self):
+        """Timer callback. Executes a pure pursuit controller and publishes v and w commands.
+
+        Starts to operate once the robot is localized.
+
+        """
+        if self.current_pose is not None and self.current_pose.localized:
             # Parse pose
-            x = pose_msg.pose.position.x
-            y = pose_msg.pose.position.y
-            quat_w = pose_msg.pose.orientation.w
-            quat_x = pose_msg.pose.orientation.x
-            quat_y = pose_msg.pose.orientation.y
-            quat_z = pose_msg.pose.orientation.z
+            x = self.current_pose.pose.position.x
+            y = self.current_pose.pose.position.y
+            quat_w = self.current_pose.pose.orientation.w
+            quat_x = self.current_pose.pose.orientation.x
+            quat_y = self.current_pose.pose.orientation.y
+            quat_z = self.current_pose.pose.orientation.z
             _, _, theta = quat2euler((quat_w, quat_x, quat_y, quat_z))
             theta %= 2 * math.pi
 
@@ -99,6 +108,33 @@ class PurePursuitNode(LifecycleNode):
 
             # Publish
             self._publish_velocity_commands(v, w)
+
+    # def _compute_commands_callback(self, pose_msg: PoseStamped):
+    #     """Subscriber callback. Executes a pure pursuit controller and publishes v and w commands.
+
+    #     Starts to operate once the robot is localized.
+
+    #     Args:
+    #         pose_msg: Message containing the estimated robot pose.
+
+    #     """
+    #     if pose_msg.localized:
+    #         # Parse pose
+    #         x = pose_msg.pose.position.x
+    #         y = pose_msg.pose.position.y
+    #         quat_w = pose_msg.pose.orientation.w
+    #         quat_x = pose_msg.pose.orientation.x
+    #         quat_y = pose_msg.pose.orientation.y
+    #         quat_z = pose_msg.pose.orientation.z
+    #         _, _, theta = quat2euler((quat_w, quat_x, quat_y, quat_z))
+    #         theta %= 2 * math.pi
+
+    #         # Execute pure pursuit
+    #         v, w = self._pure_pursuit.compute_commands(x, y, theta)
+    #         self.get_logger().info(f"Commands: v = {v:.3f} m/s, w = {w:+.3f} rad/s")
+
+    #         # Publish
+    #         self._publish_velocity_commands(v, w)
 
     def _path_callback(self, path_msg: Path):
         """Subscriber callback. Saves the path the pure pursuit controller has to follow.
