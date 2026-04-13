@@ -82,7 +82,7 @@ def generate_launch_description():
         arguments=["--ros-args", "--log-level", "WARN"],
         parameters=[
             {
-                "lookahead_distance": 0.3,
+                "lookahead_distance": 0.15,
                 "simulation": simulation,
             }
         ],
@@ -93,11 +93,7 @@ def generate_launch_description():
         executable="ekf_node",
         name="ekf_filter_node",
         output="screen",
-        parameters=[
-            PathJoinSubstitution(
-                [FindPackageShare("amr_bringup"), "config", "ekf.yaml"]
-            )
-        ],
+        parameters=[PathJoinSubstitution([FindPackageShare("amr_bringup"), "config", "ekf.yaml"])],
     )
 
     coppeliasim_node = LifecycleNode(

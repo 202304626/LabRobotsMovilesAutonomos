@@ -15,6 +15,9 @@ setup(
         # AÑADE ESTA LÍNEA (Asegúrate de que la ruta 'maps/*.json' coincida con tu carpeta src)
         (os.path.join("share", package_name, "maps"), glob("maps/*.json")),
     ],
+    package_data={
+        package_name: ["*.so", "*.dll", "*.dylib"],
+    },
     install_requires=["setuptools"],
     zip_safe=True,
     maintainer="Jaime Boal",
