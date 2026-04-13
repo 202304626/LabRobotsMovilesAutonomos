@@ -152,36 +152,32 @@ class ParticleFilter:
         # TODO: 3.5. Complete the function body with your code.
         # We assume that v and w are measured with respect of the robot
 
-        for particle in self._particles:
-            # Extract the components of this particle, to update them
-            x_o, y_o, theta_o = particle
+        # Vectorized motion update
+        n = self._particle_count
+        noise_v = np.random.normal(0, self._sigma_v, n)
+        noise_w = np.random.normal(0, self._sigma_w, n)
 
-            # Generate noise
-            noise_v = np.random.normal(loc=0, scale=self._sigma_v)
-            noise_w = np.random.normal(loc=0, scale=self._sigma_w)
+        x_o = self._particles[:, 0]
+        y_o = self._particles[:, 1]
+        theta_o = self._particles[:, 2]
 
-            # Proyect the velocities to the x,y axis (global world axis)
-            x_vel = np.cos(theta_o) * (v + noise_v)
-            y_vel = np.sin(theta_o) * (v + noise_v)
+        v_eff = v + noise_v
+        x_vel = np.cos(theta_o) * v_eff
+        y_vel = np.sin(theta_o) * v_eff
 
-            # Update x,y,theta with noise
-            particle[0] += x_vel * self._dt
-            particle[1] += y_vel * self._dt
-            particle[2] += (w + noise_w) * self._dt
+        self._particles[:, 0] += x_vel * self._dt
+        self._particles[:, 1] += y_vel * self._dt
+        self._particles[:, 2] = (theta_o + (w + noise_w) * self._dt) % (2 * np.pi)
 
-            # Normalize to make sure that the angle is in range [0, 2*pi]
-            particle[2] %= 2 * np.pi
-
-            # Compute the intersection with the walls
-            colission_segment = [(x_o, y_o), (particle[0], particle[1])]
-            colissions, _ = self._map.check_collision(
-                segment=colission_segment, compute_distance=True
-            )
-
-            if colissions:
-                # Readjust the position of the particle, to avoid traspassing the wall
-                particle[0] = colissions[0]
-                particle[1] = colissions[1]
+        # Check collision using map bounds if compiled_intersect raycasting per particle is too slow,
+        # but to maintain semantics we must check segment collisions for each particle.
+        # Vectorizing the segment check is harder, we'll keep a loop for collisions for now.
+        for i in range(n):
+            segment = [(x_o[i], y_o[i]), (self._particles[i, 0], self._particles[i, 1])]
+            collisions, _ = self._map.check_collision(segment, compute_distance=True)
+            if collisions:
+                self._particles[i, 0] = collisions[0]
+                self._particles[i, 1] = collisions[1]
 
     def resample(self, measurements: list[float]) -> None:
         """Samples a new set of particles.
