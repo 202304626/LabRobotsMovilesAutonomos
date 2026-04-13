@@ -346,111 +346,111 @@ class ParticleFilter:
 
         return particles
 
-    def _sense(self, pose: tuple[float, float, float]) -> list[float]:
-        """Obtains the predicted measurement of every LiDAR ray given the robot's pose.
+    # def _sense(self, pose: tuple[float, float, float]) -> list[float]:
+    #     """Obtains the predicted measurement of every LiDAR ray given the robot's pose.
 
-        Args:
-            pose: Particle pose (x, y, theta) [m, m, rad].
+    #     Args:
+    #         pose: Particle pose (x, y, theta) [m, m, rad].
 
-        Returns: List of predicted measurements; nan if a sensor is out of range.
+    #     Returns: List of predicted measurements; nan if a sensor is out of range.
 
-        """
+    #     """
 
-        # TODO: 3.6. Complete the missing function body with your code.
-        rays = np.arange(0, 240, 240 // 8).tolist()
+    #     # TODO: 3.6. Complete the missing function body with your code.
+    #     rays = np.arange(0, 240, 240 // 8).tolist()
 
-        segments = self._lidar_rays(pose=pose, indices=rays)
+    #     segments = self._lidar_rays(pose=pose, indices=rays)
 
-        z_hat: list[float] = [
-            self._map.check_collision(segment=pair, compute_distance=True)[1] for pair in segments
-        ]
+    #     z_hat: list[float] = [
+    #         self._map.check_collision(segment=pair, compute_distance=True)[1] for pair in segments
+    #     ]
 
-        return z_hat
+    #     return z_hat
 
-    @staticmethod
-    def _gaussian(mu: float, sigma: float, x: float) -> float:
-        """Computes the value of a Gaussian.
+    # @staticmethod
+    # def _gaussian(mu: float, sigma: float, x: float) -> float:
+    #     """Computes the value of a Gaussian.
 
-        Args:
-            mu: Mean.
-            sigma: Standard deviation.
-            x: Variable.
+    #     Args:
+    #         mu: Mean.
+    #         sigma: Standard deviation.
+    #         x: Variable.
 
-        Returns:
-            float: Gaussian value.
+    #     Returns:
+    #         float: Gaussian value.
 
-        """
-        # TODO: 3.7. Complete the function body (i.e., replace the code below).
-        return np.exp(-0.5 * ((x - mu) / sigma) ** 2) / (sigma * np.sqrt(2 * np.pi))
+    #     """
+    #     # TODO: 3.7. Complete the function body (i.e., replace the code below).
+    #     return np.exp(-0.5 * ((x - mu) / sigma) ** 2) / (sigma * np.sqrt(2 * np.pi))
 
-    def _lidar_rays(
-        self, pose: tuple[float, float, float], indices: tuple[float], degree_increment: float = 1.5
-    ) -> list[list[tuple[float, float]]]:
-        """Determines the simulated LiDAR ray segments for a given robot pose.
+    # def _lidar_rays(
+    #     self, pose: tuple[float, float, float], indices: tuple[float], degree_increment: float = 1.5
+    # ) -> list[list[tuple[float, float]]]:
+    #     """Determines the simulated LiDAR ray segments for a given robot pose.
 
-        Args:
-            pose: Robot pose (x, y, theta) in [m] and [rad].
-            indices: Rays of interest in counterclockwise order (0 for to the forward-facing ray).
-            degree_increment: Angle difference of the sensor between contiguous rays [degrees].
+    #     Args:
+    #         pose: Robot pose (x, y, theta) in [m] and [rad].
+    #         indices: Rays of interest in counterclockwise order (0 for to the forward-facing ray).
+    #         degree_increment: Angle difference of the sensor between contiguous rays [degrees].
 
-        Returns: Ray segments. Format:
-                 [[(x0_start, y0_start), (x0_end, y0_end)],
-                  [(x1_start, y1_start), (x1_end, y1_end)],
-                  ...]
+    #     Returns: Ray segments. Format:
+    #              [[(x0_start, y0_start), (x0_end, y0_end)],
+    #               [(x1_start, y1_start), (x1_end, y1_end)],
+    #               ...]
 
-        """
-        x, y, theta = pose
+    #     """
+    #     x, y, theta = pose
 
-        # Convert the sensor origin to world coordinates
-        x_start = x - 0.035 * math.cos(theta)
-        y_start = y - 0.035 * math.sin(theta)
+    #     # Convert the sensor origin to world coordinates
+    #     x_start = x - 0.035 * math.cos(theta)
+    #     y_start = y - 0.035 * math.sin(theta)
 
-        rays = []
+    #     rays = []
 
-        for index in indices:
-            ray_angle = math.radians(degree_increment * index)
-            x_end = x_start + self._sensor_range_max * math.cos(theta + ray_angle)
-            y_end = y_start + self._sensor_range_max * math.sin(theta + ray_angle)
-            rays.append([(x_start, y_start), (x_end, y_end)])
+    #     for index in indices:
+    #         ray_angle = math.radians(degree_increment * index)
+    #         x_end = x_start + self._sensor_range_max * math.cos(theta + ray_angle)
+    #         y_end = y_start + self._sensor_range_max * math.sin(theta + ray_angle)
+    #         rays.append([(x_start, y_start), (x_end, y_end)])
 
-        return rays
+    #     return rays
 
-    def _measurement_probability(
-        self, measurements: list[float], particle: tuple[float, float, float]
-    ) -> float:
-        """Computes the probability of a set of measurements given a particle's pose.
+    # def _measurement_probability(
+    #     self, measurements: list[float], particle: tuple[float, float, float]
+    # ) -> float:
+    #     """Computes the probability of a set of measurements given a particle's pose.
 
-        If a measurement is unavailable (usually because it is out of range), it is replaced with
-        the minimum sensor range to perform the computation because the environment is smaller
-        than the maximum range.
+    #     If a measurement is unavailable (usually because it is out of range), it is replaced with
+    #     the minimum sensor range to perform the computation because the environment is smaller
+    #     than the maximum range.
 
-        Args:
-            measurements: Sensor measurements [m].
-            particle: Particle pose (x, y, theta) [m, m, rad].
+    #     Args:
+    #         measurements: Sensor measurements [m].
+    #         particle: Particle pose (x, y, theta) [m, m, rad].
 
-        Returns:
-            float: Probability.
+    #     Returns:
+    #         float: Probability.
 
-        """
+    #     """
 
-        # TODO: 3.8. Complete the missing function body with your code.
+    #     # TODO: 3.8. Complete the missing function body with your code.
 
-        probability = 1.0
+    #     probability = 1.0
 
-        predicted_measurements = self._sense(pose=particle)
-        rays = range(0, 240, 240 // 8)
-        subsampled_measurements = [measurements[i] for i in rays]
-        for measurement, predicted_measurement in zip(
-            subsampled_measurements, predicted_measurements
-        ):
-            if np.isnan(measurement):
-                measurement = self._sensor_range_min
+    #     predicted_measurements = self._sense(pose=particle)
+    #     rays = range(0, 240, 240 // 8)
+    #     subsampled_measurements = [measurements[i] for i in rays]
+    #     for measurement, predicted_measurement in zip(
+    #         subsampled_measurements, predicted_measurements
+    #     ):
+    #         if np.isnan(measurement):
+    #             measurement = self._sensor_range_min
 
-            if np.isnan(predicted_measurement):
-                predicted_measurement = self._sensor_range_min
+    #         if np.isnan(predicted_measurement):
+    #             predicted_measurement = self._sensor_range_min
 
-            probability *= self._gaussian(
-                mu=measurement, sigma=self._sigma_z, x=predicted_measurement
-            )
+    #         probability *= self._gaussian(
+    #             mu=measurement, sigma=self._sigma_z, x=predicted_measurement
+    #         )
 
-        return probability
+    # return probability
