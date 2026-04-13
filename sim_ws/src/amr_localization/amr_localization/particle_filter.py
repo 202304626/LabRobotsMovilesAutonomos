@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import datetime
 import math
 import numpy as np
@@ -8,6 +9,9 @@ from scipy.stats import norm
 from amr_localization.maps import Map
 from matplotlib import pyplot as plt
 from sklearn.cluster import DBSCAN
+import time
+
+from amr_localization import amr_localization_cpp
 
 # added
 from ament_index_python.packages import get_package_share_directory
@@ -83,6 +87,16 @@ class ParticleFilter:
             safety_distance=0.08,
         )
 
+        map_data = []
+        for segment in self._map._map_segments:
+            map_data.append([segment[0][0], segment[0][1], segment[1][0], segment[1][1]])
+
+        map_array = np.array(map_data, dtype=np.float64)
+        if not map_array.flags["C_CONTIGUOUS"]:
+            map_array = np.ascontiguousarray(map_array)
+
+        amr_localization_cpp.init_map_segments(map_array)
+
         self._particles = self._init_particles(
             particle_count, global_localization, initial_pose, initial_pose_sigma
         )
@@ -140,76 +154,61 @@ class ParticleFilter:
         return localized, pose
 
     def move(self, v: float, w: float) -> None:
-        """Performs a motion update on the particles.
-
-        Args:
-            v: Linear velocity [m].
-            w: Angular velocity [rad/s].
-
-        """
+        """Performs a motion update on the particles using C++ core."""
         self._iteration += 1
 
-        # TODO: 3.5. Complete the function body with your code.
-        # We assume that v and w are measured with respect of the robot
+        if not self._particles.flags["C_CONTIGUOUS"]:
+            self._particles = np.ascontiguousarray(self._particles)
 
-        # Vectorized motion update
-        n = self._particles.shape[0]
-
-        noise_v = np.random.normal(0, self._sigma_v, n)
-        noise_w = np.random.normal(0, self._sigma_w, n)
-
-        # FIX 2: Use .copy() so these don't update when you modify self._particles
-        x_o = self._particles[:, 0].copy()
-        y_o = self._particles[:, 1].copy()
-        theta_o = self._particles[:, 2]  # Doesn't strictly need .copy() here, but good practice
-
-        v_eff = v + noise_v
-        x_vel = np.cos(theta_o) * v_eff
-        y_vel = np.sin(theta_o) * v_eff
-
-        self._particles[:, 0] += x_vel * self._dt
-        self._particles[:, 1] += y_vel * self._dt
-        self._particles[:, 2] = (theta_o + (w + noise_w) * self._dt) % (2 * np.pi)
-
-        # Collision check loop will now use the true old positions
-        for i in range(n):
-            segment = [(x_o[i], y_o[i]), (self._particles[i, 0], self._particles[i, 1])]
-            collisions, _ = self._map.check_collision(segment, compute_distance=True)
-            if collisions:
-                self._particles[i, 0] = collisions[0]
-                self._particles[i, 1] = collisions[1]
+        # Esto hace el ruido, la trigonometría Y el bucle de colisiones a máxima velocidad
+        amr_localization_cpp.move_and_collide_particles(
+            self._particles, v, w, self._dt, self._sigma_v, self._sigma_w
+        )
 
     def resample(self, measurements: list[float]) -> None:
-        """Samples a new set of particles.
+        """Samples a new set of particles using Batch C++ Raycasting."""
+        self._iteration += 1
+        n = self._particles.shape[0]
+        from amr_localization import amr_localization_cpp
 
-        Args:
-            measurements: Sensor measurements [m].
+        # 1. Definimos los índices de los rayos que queremos usar
+        ray_indices = list(range(0, 240, 240 // 8))
 
-        """
-        # TODO: 3.9. Complete the function body with your code (i.e., replace the pass statement).
-
-        probabilities = np.array(
-            [self._measurement_probability(measurements, particle) for particle in self._particles],
-            dtype=float,
+        # 2. LANZAMIENTO MASIVO: C++ calcula los láseres de TODAS las partículas a la vez
+        # all_z_hat es una matriz (N_partículas, 8_rayos)
+        all_z_hat = amr_localization_cpp.batch_raycasting(
+            self._particles, ray_indices, 1.5, -0.035, self._sensor_range_max
         )
-        # dont forget that this is a likehood sum so we have to normalize in order to compare correctly
-        total = sum(probabilities)
-        probabilities = probabilities / total
-        n = self._particle_count
-        rand_numbers = np.random.uniform(0, 1 / n) + np.arange(n) / n  # array of stratas
 
-        # we sum the weights in order to apply the  stratific samples
+        # 3. Vectorizamos el cálculo de probabilidad
+        z_real = np.array([measurements[i] for i in ray_indices])
+        z_real = np.where(np.isnan(z_real), self._sensor_range_min, z_real)
+
+        # Convertimos all_z_hat NaNs a sensor_range_min
+        all_z_hat = np.where(np.isnan(all_z_hat), self._sensor_range_min, all_z_hat)
+
+        # Calculamos la probabilidad gaussiana para todos a la vez (vectorizado con NumPy)
+        # Prob = exp(-0.5 * ((z_pred - z_obs) / sigma)^2)
+        diff = all_z_hat - z_real  # Diferencia entre lo que ve cada partícula y el robot real
+        exponent = -0.5 * (diff / self._sigma_z) ** 2
+        probs_per_ray = np.exp(exponent) / (self._sigma_z * np.sqrt(2 * np.pi))
+
+        # La probabilidad de la partícula es el producto de las probabilidades de sus rayos
+        probabilities = np.prod(probs_per_ray, axis=1)
+
+        # --- El resto del resample sigue igual ---
+        total = np.sum(probabilities)
+        if total > 0:
+            probabilities /= total
+        else:
+            probabilities = np.ones(n) / n  # Caso de emergencia si todas fallan
+
+        rand_numbers = np.random.uniform(0, 1 / n) + np.arange(n) / n
         weight_circle = np.cumsum(probabilities)
-
-        # we choose the largest weight whose cumulative value does not exceed the strat.
         prominent_weights = np.digitize(rand_numbers, weight_circle)
         prominent_weights = np.clip(prominent_weights, 0, len(self._particles) - 1)
 
         self._particles = self._particles[prominent_weights]
-
-        if self._logger is not None:
-            # self._logger.warning(f"Ejecutando resample. Nº Particulas: {len(self._particles)}.")
-            pass
 
     def plot(self, axes, orientation: bool = True):
         """Draws particles.
