@@ -49,7 +49,7 @@ def generate_launch_description():
                 "node_count": 250,
                 "obstacle_safety_distance": 0.15,
                 "simulation": simulation,
-                "smoothing_additional_points": 5,
+                "smoothing_additional_points": 10,
                 "smoothing_data_weight": 0.1,
                 "smoothing_smooth_weight": 0.1,
                 "use_grid": True,
@@ -82,7 +82,7 @@ def generate_launch_description():
         arguments=["--ros-args", "--log-level", "WARN"],
         parameters=[
             {
-                "lookahead_distance": 0.15,
+                "lookahead_distance": 0.2,
                 "simulation": simulation,
             }
         ],
