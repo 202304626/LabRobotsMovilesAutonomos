@@ -67,6 +67,7 @@ class ParticleFilter:
         self._iteration: int = 0
 
         self._localized_particle_count: int = 25
+        self._localized = False
 
         #######################################
         # Obtenemos la ruta absoluta al archivo del mapa de forma segura
@@ -105,25 +106,86 @@ class ParticleFilter:
             "%Y-%m-%d_%H-%M-%S"
         )
 
+    # def compute_pose(self) -> tuple[bool, tuple[float, float, float]]:
+    #     """Computes the pose estimate when the particles form a single DBSCAN cluster.
+
+    #     Adapts the amount of particles depending on the number of clusters during localization.
+    #     100 particles are kept for pose tracking.
+
+    #     Returns:
+    #         localized: True if the pose estimate is valid.
+    #         pose: Robot pose estimate (x, y, theta) [m, m, rad].
+
+    #     """
+    #     # TODO: 3.10. Complete the missing function body with your code.
+
+    #     localized = False
+    #     pose = (float("nan"), float("nan"), float("nan"))
+
+    #     particles_projected = np.array(self._particles, dtype=float)
+    #     theta = particles_projected[:, -1]
+
+    #     particles_projected = np.hstack(
+    #         [particles_projected[:, :-1], np.cos(theta)[:, None], np.sin(theta)[:, None]]
+    #     )
+
+    #     if not self._localized:
+    #         clustering = DBSCAN(eps=0.2, min_samples=5).fit(particles_projected)
+    #         labels = clustering.labels_
+    #         n_clusters = len(set(labels) - {-1})
+    #         indexes = clustering.core_sample_indices_
+
+    #     if n_clusters == 1:
+    #         localized = True
+    #         cluster_particles = np.asarray(self._particles[indexes], dtype=np.float64)
+
+    #         x_mean = np.mean(cluster_particles[:, 0])
+    #         y_mean = np.mean(cluster_particles[:, 1])
+
+    #         theta_mean = math.atan2(
+    #             np.mean(np.sin(cluster_particles[:, -1])), np.mean(np.cos(cluster_particles[:, -1]))
+    #         ) % (2 * math.pi)
+
+    #         pose = (x_mean, y_mean, theta_mean)
+
+    #         self._particle_count = self._localized_particle_count
+    #         self._localized = True
+
+    #     elif n_clusters > 1:
+    #         self._particle_count = max(int(100 * n_clusters), 100)
+
+    #     return localized, pose
+
     def compute_pose(self) -> tuple[bool, tuple[float, float, float]]:
-        """Computes the pose estimate when the particles form a single DBSCAN cluster.
+        """Computes the pose estimate with a fast-track for tracking mode."""
 
-        Adapts the amount of particles depending on the number of clusters during localization.
-        100 particles are kept for pose tracking.
+        # Si ya estamos localizados, usamos la "vía rápida"
+        if self._localized:
+            # 1. Calculamos la dispersión (Desviación estándar de las posiciones)
+            # Si el std es bajo, es que el grupo está unido y no necesitamos DBSCAN
+            std_x = np.std(self._particles[:, 0])
+            std_y = np.std(self._particles[:, 1])
 
-        Returns:
-            localized: True if the pose estimate is valid.
-            pose: Robot pose estimate (x, y, theta) [m, m, rad].
+            # Umbral de seguridad: si las partículas se separan más de 30cm,
+            # es que nos hemos perdido y hay que volver a usar DBSCAN
+            if std_x < 0.3 and std_y < 0.3:
+                x_mean = np.mean(self._particles[:, 0])
+                y_mean = np.mean(self._particles[:, 1])
+                theta_mean = math.atan2(
+                    np.mean(np.sin(self._particles[:, 2])), np.mean(np.cos(self._particles[:, 2]))
+                ) % (2 * math.pi)
 
-        """
-        # TODO: 3.10. Complete the missing function body with your code.
+                return True, (x_mean, y_mean, theta_mean)
+            else:
+                # Nos hemos dispersado, perdemos el estado de "localizado"
+                self._localized = False
+                if self._logger:
+                    self._logger.warn("Pérdida de convergencia, re-activando DBSCAN")
 
-        localized = False
-        pose = (float("nan"), float("nan"), float("nan"))
-
+        # --- MODO LOCALIZACIÓN (DBSCAN) ---
+        # Solo llegamos aquí si self._localized es False
         particles_projected = np.array(self._particles, dtype=float)
         theta = particles_projected[:, -1]
-
         particles_projected = np.hstack(
             [particles_projected[:, :-1], np.cos(theta)[:, None], np.sin(theta)[:, None]]
         )
@@ -134,24 +196,22 @@ class ParticleFilter:
         indexes = clustering.core_sample_indices_
 
         if n_clusters == 1:
-            localized = True
+            self._localized = True  # ¡Lo encontramos!
             cluster_particles = np.asarray(self._particles[indexes], dtype=np.float64)
 
             x_mean = np.mean(cluster_particles[:, 0])
             y_mean = np.mean(cluster_particles[:, 1])
-
             theta_mean = math.atan2(
                 np.mean(np.sin(cluster_particles[:, -1])), np.mean(np.cos(cluster_particles[:, -1]))
             ) % (2 * math.pi)
 
-            pose = (x_mean, y_mean, theta_mean)
-
             self._particle_count = self._localized_particle_count
+            return True, (x_mean, y_mean, theta_mean)
 
         elif n_clusters > 1:
             self._particle_count = max(int(100 * n_clusters), 100)
 
-        return localized, pose
+        return False, (float("nan"), float("nan"), float("nan"))
 
     def move(self, v: float, w: float) -> None:
         """Performs a motion update on the particles using C++ core."""
@@ -201,7 +261,8 @@ class ParticleFilter:
         if total > 0:
             probabilities /= total
         else:
-            probabilities = np.ones(n) / n  # Caso de emergencia si todas fallan
+            probabilities = np.ones(n) / n
+            self._localized = False
 
         rand_numbers = np.random.uniform(0, 1 / n) + np.arange(n) / n
         weight_circle = np.cumsum(probabilities)
