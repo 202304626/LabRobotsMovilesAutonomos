@@ -96,73 +96,68 @@ class PRM:
         self, start: tuple[float, float], goal: tuple[float, float]
     ) -> list[tuple[float, float]]:
         """Computes the shortest path from a start to a goal location using the A* algorithm.
-
         Args:
             start: Initial location in (x, y) [m] format.
             goal: Destination in (x, y) [m] format.
-
         Returns:
             Path to the destination. The first value corresponds to the initial location.
-
         """
+        import heapq  # Importamos la cola de prioridad de alto rendimiento
+        import math
+
         # Check if the goal is valid
         if not self._map.contains(goal):
             raise ValueError("Goal location is outside the environment.")
-
-        h = {
-            node: np.linalg.norm(np.array(node) - np.array(goal)) for node in self._graph.keys()
-        }  # Heuristic function
-
-        ancestors: dict[tuple[float, float], tuple[float, float]] = {}  # {(x, y: (x_prev, y_prev)}
-
-        # TODO: 4.3. Complete the function body (i.e., replace the code below).
-        path: list[tuple[float, float]] = []
-
-        # Find the closest nodes in the graph to the start and goal locations
+        ancestors: dict[tuple[float, float], tuple[float, float]] = {}
+        # Encontrar los nodos más cercanos de forma vectorizada/nativa rápida
         closest_start_node = min(
             self._graph.keys(),
-            key=lambda node: np.linalg.norm(np.array(node) - np.array(start)),
+            key=lambda node: math.hypot(node[0] - start[0], node[1] - start[1]),
         )
         closest_goal_node = min(
             self._graph.keys(),
-            key=lambda node: np.linalg.norm(np.array(node) - np.array(goal)),
+            key=lambda node: math.hypot(node[0] - goal[0], node[1] - goal[1]),
         )
-
         ancestors[goal] = closest_goal_node
         ancestors[closest_start_node] = start
+        # Diccionario para rastrear el coste real (G) más barato a cada nodo
+        g_scores = {closest_start_node: 0.0}
 
-        g = 0
-        f = h[closest_start_node] + g
-        open_list = {closest_start_node: (f, g)}  # {(x, y): (f,g)}
-        closed_list = set()  # set of (x, y) tuples
+        # open_list será nuestro Min-Heap (Cola de prioridad)
+        # Guardaremos tuplas de la forma: (F_score, G_score, nodo_tupla)
+        # heapq extrae SIEMPRE el de menor F_score en O(1)
+        open_list = []
+        initial_h = math.hypot(closest_start_node[0] - goal[0], closest_start_node[1] - goal[1])
+        heapq.heappush(open_list, (initial_h, 0.0, closest_start_node))
 
-        while len(open_list.keys()) != 0:
-            current_node = min(
-                open_list.keys(), key=lambda node: open_list[node][0]
-            )  # Get the node with min f
-
-            current_g = open_list[current_node][1]
-
+        closed_list = set()
+        while open_list:
+            # Extraemos el nodo con el menor F_score de forma instantánea
+            current_f, current_g, current_node = heapq.heappop(open_list)
+            # Si hemos llegado al objetivo, reconstruimos el camino
             if current_node == closest_goal_node:
-                path = self._reconstruct_path(start, goal, ancestors)
-                return path
-
+                return self._reconstruct_path(start, goal, ancestors)
+            # Si ya expandimos este nodo con un coste mejor o igual, lo ignoramos
+            if current_node in closed_list:
+                continue
             closed_list.add(current_node)
-            del open_list[current_node]
-
-            neighbors = self._graph[current_node]
-            for neighbor in neighbors:
+            for neighbor in self._graph[current_node]:
                 if neighbor in closed_list:
                     continue
-
-                neigh_g = current_g + np.linalg.norm(np.array(current_node) - np.array(neighbor))
-                # check if new g is better than old g
-                if neighbor not in open_list or neigh_g < open_list[neighbor][1]:
+                # Distancia euclídea ultrarrápida usando math.hypot
+                dist = math.hypot(current_node[0] - neighbor[0], current_node[1] - neighbor[1])
+                tentative_g = current_g + dist
+                # Si descubrimos un camino mejor hacia el vecino
+                if neighbor not in g_scores or tentative_g < g_scores[neighbor]:
                     ancestors[neighbor] = current_node
-                    g = neigh_g
-                    f = g + h[neighbor]
-                    open_list[neighbor] = (f, g)
+                    g_scores[neighbor] = tentative_g
 
+                    # Heurística al objetivo
+                    h = math.hypot(neighbor[0] - goal[0], neighbor[1] - goal[1])
+                    f_score = tentative_g + h
+
+                    # Empujamos el vecino a la cola de prioridad en O(log N)
+                    heapq.heappush(open_list, (f_score, tentative_g, neighbor))
         raise ValueError("No path found from start to goal.")
 
     @staticmethod
@@ -409,15 +404,23 @@ class PRM:
                     if self._map.contains((x, y)):
                         graph[(x, y)] = []
         else:
-            for _ in range(node_count):
-                valid = False
-                while not valid:
-                    particle_x = np.random.uniform(low=x_min, high=x_max)
-                    particle_y = np.random.uniform(low=y_min, high=y_max)
-
+            # BATCH GENERATION: Generamos nodos en masa para aniquilar el bucle lento de Python
+            batch_size = node_count * 5
+            valid_count = 0
+            while valid_count < node_count:
+                # Array de NumPy con las posiciones aleatorias de golpe
+                batch_x = np.random.uniform(low=x_min, high=x_max, size=batch_size)
+                batch_y = np.random.uniform(low=y_min, high=y_max, size=batch_size)
+                for i in range(batch_size):
+                    particle_x = batch_x[i]
+                    particle_y = batch_y[i]
+                    # Si no colisiona, lo añadimos al grafo
                     if self._map.contains((particle_x, particle_y)):
-                        valid = True
+                        # Usar tuplas evita problemas de hasheo con las keys del diccionario
                         graph[(particle_x, particle_y)] = []
+                        valid_count += 1
+                        if valid_count == node_count:
+                            return graph
 
         return graph
 
