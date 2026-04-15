@@ -9,7 +9,7 @@ import math
 def generate_launch_description():
     simulation = True
     world = "project"
-    start = (-1, -1, math.radians(90))
+    start = (-1, 0.6, math.radians(90))
     goal = (-0.6, 1.0)
 
     particle_filter_node = LifecycleNode(
@@ -48,7 +48,7 @@ def generate_launch_description():
                 "goal": goal,
                 "grid_size": 0.2,
                 "node_count": 800,
-                "obstacle_safety_distance": 0.10,
+                "obstacle_safety_distance": 0.12,
                 "simulation": simulation,
                 "smoothing_additional_points": 10,
                 "smoothing_data_weight": 0.1,
@@ -85,7 +85,7 @@ def generate_launch_description():
         parameters=[
             {
                 "dt": 0.05,
-                "lookahead_distance": 0.2,
+                "lookahead_distance": 0.20,
                 "simulation": simulation,
             }
         ],
