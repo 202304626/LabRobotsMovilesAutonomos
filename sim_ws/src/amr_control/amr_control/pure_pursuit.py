@@ -94,6 +94,7 @@ class PurePursuit:
     def path(self, value: list[tuple[float, float]]) -> None:
         """Path setter."""
         self._path = value
+        self._path_arr = np.array(value)  # Convert path to numpy array for efficient calculations
         self._is_aligned = False  # reset alignment when a new path is set
         self._last_closest_idx = 0  # reset last closest index when a new path is set
 
@@ -121,7 +122,7 @@ class PurePursuit:
         )
         closest_idx = path.index(closest_xy)"""
 
-        path = np.array(self._path)
+        path = self._path_arr
 
         if not hasattr(self, "_last_closest_idx"):
             self._last_closest_idx = 0
@@ -155,7 +156,7 @@ class PurePursuit:
 
         """
         # TODO: 4.10. Complete the function body with your code (i.e., determine target_xy).
-        path = np.array(self._path)
+        path = self._path_arr
         np_origin_xy = np.array(origin_xy)
 
         future_path = path[
