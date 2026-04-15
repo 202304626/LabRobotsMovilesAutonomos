@@ -21,7 +21,7 @@ def generate_launch_description():
         arguments=["--ros-args", "--log-level", "WARN"],
         parameters=[
             {
-                "dt": 0.5,
+                "dt": 0.05,
                 "enable_plot": False,
                 "global_localization": True,
                 "particles": 3000,
@@ -68,7 +68,7 @@ def generate_launch_description():
         arguments=["--ros-args", "--log-level", "WARN"],
         parameters=[
             {
-                "dt": 0.5,
+                "dt": 0.05,
                 "enable_localization": True,
                 "simulation": simulation,
             }
@@ -84,7 +84,7 @@ def generate_launch_description():
         arguments=["--ros-args", "--log-level", "WARN"],
         parameters=[
             {
-                "dt": 0.5,
+                "dt": 0.05,
                 "lookahead_distance": 0.2,
                 "simulation": simulation,
             }
@@ -108,7 +108,7 @@ def generate_launch_description():
         arguments=["--ros-args", "--log-level", "WARN"],
         parameters=[
             {
-                "dt": 0.5,
+                "dt": 0.05,
                 "enable_localization": True,
                 "goal": goal,
                 "pose_tolerance": (0.1, 10.0),
