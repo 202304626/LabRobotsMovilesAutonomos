@@ -5,7 +5,6 @@ import numpy as np
 import os
 import platform
 
-from matplotlib import pyplot as plt
 from shapely.geometry import Point
 from shapely.geometry.polygon import Polygon, LineString
 
@@ -237,6 +236,7 @@ class Map:
             axes: Modified axes.
 
         """
+
         x_min, y_min, x_max, y_max = self.bounds()
 
         major_ticks = np.arange(min(x_min, y_min), max(x_max, y_max) + 0.01, 0.4)
@@ -290,6 +290,8 @@ class Map:
             save_dir: Image save directory.
 
         """
+        from matplotlib import pyplot as plt
+
         figure, axes = plt.subplots(1, 1, figsize=figure_size, num=figure_number)
         axes = self.plot(axes)
         axes.set_title(f"Map ({title})")
@@ -328,6 +330,8 @@ class Map:
             save_dir: Image save directory.
 
         """
+        from matplotlib import pyplot as plt
+
         x_min, y_min, x_max, y_max = self.bounds()
         rows, cols = self._region_segments.shape
         major_ticks = np.arange(min(x_min, y_min), max(x_max, y_max) + 0.01, 1)

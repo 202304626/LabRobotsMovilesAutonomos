@@ -6,7 +6,6 @@ from geometry_msgs.msg import PoseStamped
 from nav_msgs.msg import Path
 
 import os
-import time
 import traceback
 
 from amr_planning.prm import PRM
@@ -75,7 +74,6 @@ class PRMNode(LifecycleNode):
             )
             self._localized = False
 
-            start_time = time.perf_counter()
             self._planning = PRM(
                 map_path,
                 obstacle_safety_distance,
@@ -86,9 +84,6 @@ class PRMNode(LifecycleNode):
                 simulation=self._simulation,
                 logger=None,  # Replace None with self.get_logger() to enable logging in the class
             )
-            roadmap_creation_time = time.perf_counter() - start_time
-
-            # self.get_logger().info(f"Roadmap creation time: {roadmap_creation_time:1.3f} s")
 
             # Publishers
             # TODO: 4.6. Create the /path publisher (Path message).
@@ -112,7 +107,6 @@ class PRMNode(LifecycleNode):
             state: Current lifecycle state.
 
         """
-        # self.get_logger().info(f"Transitioning from '{state.label}' to 'active' state.")
 
         return super().on_activate(state)
 
@@ -128,16 +122,12 @@ class PRMNode(LifecycleNode):
 
             path = self._planning.find_path(start, self._goal)
 
-            # self.get_logger().info(f"Pathfinding time: {pathfinding_time:1.3f} s")
-
             smoothed_path = PRM.smooth_path(
                 path,
                 data_weight=self._smoothing_data_weight,
                 smooth_weight=self._smoothing_smooth_weight,
                 additional_smoothing_points=self._smoothing_additional_points,
             )
-
-            # self.get_logger().info(f"Smoothing time: {smoothing_time:1.3f} s")
 
             if self._enable_plot:
                 self._planning.show(path=path, smoothed_path=smoothed_path, save_figure=True)

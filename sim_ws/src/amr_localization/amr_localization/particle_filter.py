@@ -106,56 +106,6 @@ class ParticleFilter:
             "%Y-%m-%d_%H-%M-%S"
         )
 
-    # def compute_pose(self) -> tuple[bool, tuple[float, float, float]]:
-    #     """Computes the pose estimate when the particles form a single DBSCAN cluster.
-
-    #     Adapts the amount of particles depending on the number of clusters during localization.
-    #     100 particles are kept for pose tracking.
-
-    #     Returns:
-    #         localized: True if the pose estimate is valid.
-    #         pose: Robot pose estimate (x, y, theta) [m, m, rad].
-
-    #     """
-    #     # TODO: 3.10. Complete the missing function body with your code.
-
-    #     localized = False
-    #     pose = (float("nan"), float("nan"), float("nan"))
-
-    #     particles_projected = np.array(self._particles, dtype=float)
-    #     theta = particles_projected[:, -1]
-
-    #     particles_projected = np.hstack(
-    #         [particles_projected[:, :-1], np.cos(theta)[:, None], np.sin(theta)[:, None]]
-    #     )
-
-    #     if not self._localized:
-    #         clustering = DBSCAN(eps=0.2, min_samples=5).fit(particles_projected)
-    #         labels = clustering.labels_
-    #         n_clusters = len(set(labels) - {-1})
-    #         indexes = clustering.core_sample_indices_
-
-    #     if n_clusters == 1:
-    #         localized = True
-    #         cluster_particles = np.asarray(self._particles[indexes], dtype=np.float64)
-
-    #         x_mean = np.mean(cluster_particles[:, 0])
-    #         y_mean = np.mean(cluster_particles[:, 1])
-
-    #         theta_mean = math.atan2(
-    #             np.mean(np.sin(cluster_particles[:, -1])), np.mean(np.cos(cluster_particles[:, -1]))
-    #         ) % (2 * math.pi)
-
-    #         pose = (x_mean, y_mean, theta_mean)
-
-    #         self._particle_count = self._localized_particle_count
-    #         self._localized = True
-
-    #     elif n_clusters > 1:
-    #         self._particle_count = max(int(100 * n_clusters), 100)
-
-    #     return localized, pose
-
     def compute_pose(self) -> tuple[bool, tuple[float, float, float]]:
         """Computes the pose estimate with a fast-track for tracking mode."""
 
