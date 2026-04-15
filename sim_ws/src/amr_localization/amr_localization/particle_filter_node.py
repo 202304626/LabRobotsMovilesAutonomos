@@ -174,7 +174,7 @@ class ParticleFilterNode(LifecycleNode):
         """
         pose = (float("inf"), float("inf"), float("inf"))
 
-        if self._localized or not self._steps % self._steps_btw_sense_updates:
+        if not self._localized or not self._steps % self._steps_btw_sense_updates:
             start_time = time.perf_counter()
             ## here? publish?
             self._particle_filter.resample(z_scan)
@@ -185,11 +185,11 @@ class ParticleFilterNode(LifecycleNode):
             if self._enable_plot:
                 self._particle_filter.show("Sense", save_figure=True)
 
-            start_time = time.perf_counter()
-            self._localized, pose = self._particle_filter.compute_pose()
-            clustering_time = time.perf_counter() - start_time
+        start_time = time.perf_counter()
+        self._localized, pose = self._particle_filter.compute_pose()
+        clustering_time = time.perf_counter() - start_time
 
-            self.get_logger().info(f"Clustering time: {clustering_time:6.3f} s")
+        self.get_logger().info(f"Clustering time: {clustering_time:6.3f} s")
 
         return pose
 
