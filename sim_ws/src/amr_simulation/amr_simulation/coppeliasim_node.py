@@ -23,6 +23,7 @@ qos_lidar_profile = QoSProfile(
     durability=QoSDurabilityPolicy.VOLATILE,
 )
 
+
 class CoppeliaSimNode(LifecycleNode):
     def __init__(self):
         """Simulator node initializer."""
@@ -45,7 +46,7 @@ class CoppeliaSimNode(LifecycleNode):
             state: Current lifecycle state.
 
         """
-        self.get_logger().info(f"Transitioning from '{state.label}' to 'inactive' state.")
+        # self.get_logger().info(f"Transitioning from '{state.label}' to 'inactive' state.")
 
         try:
             # Parameters
@@ -74,50 +75,40 @@ class CoppeliaSimNode(LifecycleNode):
             # TODO: 2.4. Create the /odometry (Odometry message) and /scan (LaserScan) publishers.
             self._odometry_publisher = self.create_publisher(
                 msg_type=Odometry,
-                topic = "odometry",
-                qos_profile = 10  # we may need: ros2 topic info odometry -v
+                topic="odometry",
+                qos_profile=10,  # we may need: ros2 topic info odometry -v
             )
 
             self._laserScan_publisher = self.create_publisher(
-                msg_type=LaserScan,
-                topic = "scan",
-                qos_profile=qos_lidar_profile
+                msg_type=LaserScan, topic="scan", qos_profile=qos_lidar_profile
             )
-            
-            # Subscribers
-            if not enable_localization:  # In this case we go to the callback with just a TwistStamped (cmd_vel) message
 
+            # Subscribers
+            if (
+                not enable_localization
+            ):  # In this case we go to the callback with just a TwistStamped (cmd_vel) message
                 # TODO: 2.12. Subscribe to /cmd_vel. Connect it with with _next_step_callback.
                 self._cmd_vel_suscriber = self.create_subscription(
-                    TwistStamped,
-                    "cmd_vel",
-                    self._next_step_callback,
-                    10)
+                    TwistStamped, "cmd_vel", self._next_step_callback, 10
+                )
 
-            
             # TODO: 3.3. Sync the /pose and /cmd_vel subscribers if enable_localization is True.
             else:
                 # In this case we want to use the callback with both messages, with synchronization:
                 # We define an empty list of suscribers
-                self._subscribers: list[ message_filters.Subscriber ] = []
+                self._subscribers: list[message_filters.Subscriber] = []
 
                 # Append the cmd vel suscriber
                 self._subscribers.append(
                     message_filters.Subscriber(
-                        self,
-                        TwistStamped,
-                        "cmd_vel",
-                        qos_profile = QoSProfile(depth=10)
+                        self, TwistStamped, "cmd_vel", qos_profile=QoSProfile(depth=10)
                     )
                 )
 
                 # Append the pose suscriber
                 self._subscribers.append(
                     message_filters.Subscriber(
-                        self,
-                        PoseStamped,
-                        "pose",
-                        qos_profile = QoSProfile(depth=10)
+                        self, PoseStamped, "pose", qos_profile=QoSProfile(depth=10)
                     )
                 )
 
@@ -125,13 +116,12 @@ class CoppeliaSimNode(LifecycleNode):
                 ts = message_filters.ApproximateTimeSynchronizer(
                     self._subscribers,
                     queue_size=10,  # number of messages of each topic we need to receive until we are "completed"
-                    slop=10.0  # max delay in seconds to consider that 2 messages are able to be syncronized
+                    slop=10.0,  # max delay in seconds to consider that 2 messages are able to be syncronized
                 )
 
                 # We register the callback that we want to execute once the measurements are received
                 ts.registerCallback(self._next_step_callback)
 
-            
         except Exception:
             self.get_logger().error(f"{traceback.format_exc()}")
             return TransitionCallbackReturn.ERROR
@@ -145,7 +135,7 @@ class CoppeliaSimNode(LifecycleNode):
             state: Current lifecycle state.
 
         """
-        self.get_logger().info(f"Transitioning from '{state.label}' to 'active' state.")
+        # self.get_logger().info(f"Transitioning from '{state.label}' to 'active' state.")
 
         try:
             # Initial method calls
@@ -167,10 +157,10 @@ class CoppeliaSimNode(LifecycleNode):
     def _next_step_callback(self, cmd_vel_msg: TwistStamped, pose_msg: PoseStamped = PoseStamped()):
         """Subscriber callback. Executes a simulation step and publishes the new measurements.
 
-        Args:
-            cmd_vel_msg: Message containing linear (v) and angular (w) speed commands.
-            pose_msg: Message containing the estimated robot pose.
-1
+                Args:
+                    cmd_vel_msg: Message containing linear (v) and angular (w) speed commands.
+                    pose_msg: Message containing the estimated robot pose.
+        1
         """
         # Check estimated pose
         self._check_estimated_pose(pose_msg)
@@ -178,13 +168,13 @@ class CoppeliaSimNode(LifecycleNode):
         # TODO: 2.13. Parse the velocities from the TwistStamped message (i.e., read v and w).
         v: float = cmd_vel_msg.twist.linear.x
         w: float = cmd_vel_msg.twist.angular.z
-        
+
         # Execute simulation step
         self._robot.move(v, w)
         self._coppeliasim.next_step()
         z_scan, z_v, z_w = self._robot.sense()
 
-        self.get_logger().info(f"Odometry: z_v = {z_v:.3f} m/s, w = {z_w:+.3f} rad/s")
+        # self.get_logger().info(f"Odometry: z_v = {z_v:.3f} m/s, w = {z_w:+.3f} rad/s")
 
         # Check goal
         if self._check_goal():
@@ -234,14 +224,14 @@ class CoppeliaSimNode(LifecycleNode):
                 once=True,  # Log only the first time this function is hit
             )
 
-            self.get_logger().info(
-                f"Estimated: x = {x_h:.2f} m, y = {y_h:.2f} m, "
-                f"th = {th_h:.2f} rad ({th_h_deg:.1f}º) | "
-                f"Real pose: x = {x:.2f} m, y = {y:.2f} m, th = {th:.2f} rad ({th_deg:.1f}º) | "
-                f"Error{' (OK)' if within_tolerance else ''}: "
-                f"{position_error:.3f} m, {angle_error:.1f}º",
-                skip_first=True,  # Log all but the first time this function is hit
-            )
+            # self.get_logger().info(
+            #     f"Estimated: x = {x_h:.2f} m, y = {y_h:.2f} m, "
+            #     f"th = {th_h:.2f} rad ({th_h_deg:.1f}º) | "
+            #     f"Real pose: x = {x:.2f} m, y = {y:.2f} m, th = {th:.2f} rad ({th_deg:.1f}º) | "
+            #     f"Error{' (OK)' if within_tolerance else ''}: "
+            #     f"{position_error:.3f} m, {angle_error:.1f}º",
+            #     skip_first=True,  # Log all but the first time this function is hit
+            # )
 
     def _check_goal(self) -> bool:
         """Checks whether the robot is localized and has reached the goal within tolerance or not.
@@ -294,7 +284,7 @@ class CoppeliaSimNode(LifecycleNode):
         msg.twist.twist.angular.z = z_w
 
         self._odometry_publisher.publish(msg=msg)
-        
+
     def _publish_scan(self, z_scan: list[float]) -> None:
         """Publishes LiDAR measurements in a sensor_msgs.msg.LaserScan message.
 
@@ -303,17 +293,17 @@ class CoppeliaSimNode(LifecycleNode):
 
         """
         # TODO: 2.6. Complete the function body with your code (i.e., replace the pass statement).
-        
+
         msg = LaserScan()
-        
+
         msg.header.stamp = self.get_clock().now().to_msg()
         msg.angle_min = 0.0
         msg.angle_max = 2.0 * math.pi
         msg.angle_increment = 2.0 * math.pi / len(z_scan)
         msg.ranges = z_scan
-    
+
         self._laserScan_publisher.publish(msg=msg)
-        
+
 
 def main(args=None):
     rclpy.init(args=args)

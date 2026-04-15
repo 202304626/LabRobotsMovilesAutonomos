@@ -49,7 +49,7 @@ class ParticleFilterNode(LifecycleNode):
             state: Current lifecycle state.
 
         """
-        self.get_logger().info(f"Transitioning from '{state.label}' to 'inactive' state.")
+        # self.get_logger().info(f"Transitioning from '{state.label}' to 'inactive' state.")
 
         try:
             # Parameters
@@ -121,7 +121,7 @@ class ParticleFilterNode(LifecycleNode):
             )
 
             ts = message_filters.ApproximateTimeSynchronizer(
-                self._subscribers, queue_size=10, slop=9
+                self._subscribers, queue_size=4, slop=1
             )
             ts.registerCallback(self._compute_pose_callback)
 
@@ -138,7 +138,7 @@ class ParticleFilterNode(LifecycleNode):
             state: Current lifecycle state.
 
         """
-        self.get_logger().info(f"Transitioning from '{state.label}' to 'active' state.")
+        # self.get_logger().info(f"Transitioning from '{state.label}' to 'active' state.")
 
         return super().on_activate(state)
 
@@ -224,7 +224,7 @@ class ParticleFilterNode(LifecycleNode):
         self._particle_filter.move(z_v, z_w)
         move_time = time.perf_counter() - start_time
 
-        self.get_logger().info(f"Move step time: {move_time:7.3f} s")
+        # self.get_logger().info(f"Move step time: {move_time:7.3f} s")
 
         if self._enable_plot:
             self._particle_filter.show("Move", save_figure=True)

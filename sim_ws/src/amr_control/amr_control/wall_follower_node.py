@@ -44,7 +44,7 @@ class WallFollowerNode(LifecycleNode):
             state: Current lifecycle state.
 
         """
-        self.get_logger().info(f"Transitioning from '{state.label}' to 'inactive' state.")
+        # self.get_logger().info(f"Transitioning from '{state.label}' to 'inactive' state.")
 
         try:
             # Parameters
@@ -96,8 +96,8 @@ class WallFollowerNode(LifecycleNode):
             # We wait until we receive all the measurements, and then we invoke the callback
             ts = message_filters.ApproximateTimeSynchronizer(
                 self._subscribers,
-                queue_size=10,  # number of messages of each topic we need to receive until we are "completed"
-                slop=10.0,  # max delay in seconds to consider that 2 messages are able to be syncronized
+                queue_size=4,  # number of messages of each topic we need to receive until we are "completed"
+                slop=1,  # max delay in seconds to consider that 2 messages are able to be syncronized
             )
 
             # We register the callback that we want to execute once the measurements are received
@@ -116,7 +116,7 @@ class WallFollowerNode(LifecycleNode):
             state: Current lifecycle state.
 
         """
-        self.get_logger().info(f"Transitioning from '{state.label}' to 'active' state.")
+        # self.get_logger().info(f"Transitioning from '{state.label}' to 'active' state.")
 
         return super().on_activate(state)
 
@@ -148,7 +148,7 @@ class WallFollowerNode(LifecycleNode):
 
             # Execute wall follower
             v, w = self._wall_follower.compute_commands(z_scan, z_v, z_w)
-            self.get_logger().info(f"Commands: v = {v:.3f} m/s, w = {w:+.3f} rad/s")
+            # self.get_logger().info(f"Commands: v = {v:.3f} m/s, w = {w:+.3f} rad/s")
 
             # Publish
             # 3.11.2 Each run of compute_commands_callback, we check the value of the internal variable that controls whether the robot should stop or not. If it is True, we publish 0.0 for both v and w. Otherwise, we publish the values computed by the wall follower.

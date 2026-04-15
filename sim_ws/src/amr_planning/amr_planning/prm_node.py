@@ -38,7 +38,7 @@ class PRMNode(LifecycleNode):
             state: Current lifecycle state.
 
         """
-        self.get_logger().info(f"Transitioning from '{state.label}' to 'inactive' state.")
+        # self.get_logger().info(f"Transitioning from '{state.label}' to 'inactive' state.")
 
         try:
             # Parameters
@@ -88,7 +88,7 @@ class PRMNode(LifecycleNode):
             )
             roadmap_creation_time = time.perf_counter() - start_time
 
-            self.get_logger().info(f"Roadmap creation time: {roadmap_creation_time:1.3f} s")
+            # self.get_logger().info(f"Roadmap creation time: {roadmap_creation_time:1.3f} s")
 
             # Publishers
             # TODO: 4.6. Create the /path publisher (Path message).
@@ -112,7 +112,7 @@ class PRMNode(LifecycleNode):
             state: Current lifecycle state.
 
         """
-        self.get_logger().info(f"Transitioning from '{state.label}' to 'active' state.")
+        # self.get_logger().info(f"Transitioning from '{state.label}' to 'active' state.")
 
         return super().on_activate(state)
 
@@ -126,22 +126,18 @@ class PRMNode(LifecycleNode):
         if pose_msg.localized and not self._localized:
             start = (pose_msg.pose.position.x, pose_msg.pose.position.y)
 
-            start_time = time.perf_counter()
             path = self._planning.find_path(start, self._goal)
-            pathfinding_time = time.perf_counter() - start_time
 
-            self.get_logger().info(f"Pathfinding time: {pathfinding_time:1.3f} s")
+            # self.get_logger().info(f"Pathfinding time: {pathfinding_time:1.3f} s")
 
-            start_time = time.perf_counter()
             smoothed_path = PRM.smooth_path(
                 path,
                 data_weight=self._smoothing_data_weight,
                 smooth_weight=self._smoothing_smooth_weight,
                 additional_smoothing_points=self._smoothing_additional_points,
             )
-            smoothing_time = time.perf_counter() - start_time
 
-            self.get_logger().info(f"Smoothing time: {smoothing_time:1.3f} s")
+            # self.get_logger().info(f"Smoothing time: {smoothing_time:1.3f} s")
 
             if self._enable_plot:
                 self._planning.show(path=path, smoothed_path=smoothed_path, save_figure=True)
