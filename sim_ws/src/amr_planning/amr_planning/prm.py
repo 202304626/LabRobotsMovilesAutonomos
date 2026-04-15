@@ -17,6 +17,11 @@ from matplotlib import pyplot as plt
 
 from ament_index_python.packages import get_package_share_directory
 
+import amr_localization.maps_cpp as maps_cpp
+
+import heapq  # Importamos la cola de prioridad de alto rendimiento
+import math
+
 
 class PRM:
     """Class to plan a path to a given destination using probabilistic roadmaps (PRM)."""
@@ -66,16 +71,6 @@ class PRM:
             use_regions=False,
             safety_distance=obstacle_safety_distance,
         )
-        #############################################################
-        """
-        self._map: Map = Map(
-            map_path,
-            sensor_range=sensor_range_max,
-            safety_distance=obstacle_safety_distance,
-            compiled_intersect=False,
-            use_regions=False,
-        )
-        """
 
         self._graph: dict[tuple[float, float], list[tuple[float, float]]] = self._create_graph(
             use_grid,
@@ -102,8 +97,6 @@ class PRM:
         Returns:
             Path to the destination. The first value corresponds to the initial location.
         """
-        import heapq  # Importamos la cola de prioridad de alto rendimiento
-        import math
 
         # Check if the goal is valid
         if not self._map.contains(goal):
@@ -332,21 +325,33 @@ class PRM:
         graph: dict[tuple[float, float], list[tuple[float, float]]],
         connection_distance: float = 0.15,
     ) -> dict[tuple[float, float], list[tuple[float, float]]]:
-        """Connects nodes using a KDTree for massive performance improvement."""
+        """Connects nodes using a KDTree and MASSIVE C++ checking."""
+
         nodes = list(graph.keys())
         if not nodes:
             return graph
-        # KDTree aniquila la búsqueda O(N^2)
+
         tree = cKDTree(nodes)
-        # Devuelve un set de pares de índices (i, j) que están a menos de connection_distance
         pairs = tree.query_pairs(connection_distance)
-        for i, j in pairs:
-            node1 = nodes[i]
-            node2 = nodes[j]
-            # Solo comprobamos la intersección si sabemos que están cerca
-            if not self._map.crosses([node1, node2]):
+
+        # ¡ESTA ES LA LÍNEA QUE FALTABA! Convierte el set en lista
+        pairs_list = list(pairs)
+        if not pairs_list:
+            return graph
+        # Preparamos TODOS los pares en un solo Array NumPy Nx4
+        segments_array = np.empty((len(pairs_list), 4), dtype=np.float64)
+        for idx, (i, j) in enumerate(pairs_list):
+            segments_array[idx] = [nodes[i][0], nodes[i][1], nodes[j][0], nodes[j][1]]
+
+        # ¡¡EL GRAN LLAMADO A C++!! Verifica miles de segmentos en menos de 1ms
+        crosses_mask = self._map.batch_crosses(segments_array)
+
+        for idx, (i, j) in enumerate(pairs_list):
+            if not crosses_mask[idx]:  # Si C++ dice que no cruza, lo añadimos
+                node1 = nodes[i]
+                node2 = nodes[j]
                 graph[node1].append(node2)
-                graph[node2].append(node1)  # El grafo es bidireccional
+                graph[node2].append(node1)
         return graph
 
     def _create_graph(

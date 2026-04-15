@@ -9,6 +9,8 @@ from matplotlib import pyplot as plt
 from shapely.geometry import Point
 from shapely.geometry.polygon import Polygon, LineString
 
+import amr_localization.maps_cpp as maps_cpp
+
 
 class Map:
     """Class to perform operations on metric maps."""
@@ -74,6 +76,28 @@ class Map:
         self._sensor_range = sensor_range
         self._intersect = self._init_intersect() if compiled_intersect else None
         self._region_segments = self._init_regions() if use_regions else None
+
+        # --- AÑADE ESTO AL FINAL DE __INIT__ ---
+        safe_segments_list = []
+        x, y = self._safe_map_polygon.exterior.xy
+        for i in range(len(x) - 1):
+            safe_segments_list.append([x[i], y[i], x[i + 1], y[i + 1]])
+        for interior in self._safe_map_polygon.interiors:
+            x, y = interior.xy
+            for i in range(len(x) - 1):
+                safe_segments_list.append([x[i], y[i], x[i + 1], y[i + 1]])
+        self._safe_map_segments_array = np.array(safe_segments_list, dtype=np.float64)
+
+    def batch_contains(self, points: np.ndarray) -> np.ndarray:
+
+        if not points.flags["C_CONTIGUOUS"]:
+            points = np.ascontiguousarray(points)
+        return maps_cpp.batch_contains(points, self._safe_map_segments_array)
+
+    def batch_crosses(self, segments: np.ndarray) -> np.ndarray:
+        if not segments.flags["C_CONTIGUOUS"]:
+            segments = np.ascontiguousarray(segments)
+        return maps_cpp.batch_crosses(segments, self._safe_map_segments_array)
 
     def bounds(self) -> tuple[float, float, float, float]:
         """Coordinates of a bounding box that contains the map.

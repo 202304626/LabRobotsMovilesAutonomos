@@ -29,11 +29,14 @@ pybind11_add_module(amr_localization_cpp src/particle_filter_cpp.cpp)
 target_include_directories(amr_localization_cpp PRIVATE ${EIGEN3_INCLUDE_DIRS})
 target_compile_features(amr_localization_cpp PRIVATE cxx_std_17)
 
+pybind11_add_module(maps_cpp src/maps_cpp.cpp)
+target_compile_features(maps_cpp PRIVATE cxx_std_17)
+
 ament_get_python_install_dir(PYTHON_INSTALL_DIR)
 
 # Instalar la librería generada junto al código python
-install(TARGETS amr_localization_cpp
-  DESTINATION "${PYTHON_INSTALL_DIR}/${PROJECT_NAME}"
+install(TARGETS amr_localization_cpp maps_cpp
+  DESTINATION "${PYTHON_INSTALL_DIR}/amr_localization"
 )
 
 ament_package()
