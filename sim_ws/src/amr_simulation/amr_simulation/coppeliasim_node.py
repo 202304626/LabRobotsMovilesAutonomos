@@ -46,7 +46,6 @@ class CoppeliaSimNode(LifecycleNode):
             state: Current lifecycle state.
 
         """
-        # self.get_logger().info(f"Transitioning from '{state.label}' to 'inactive' state.")
 
         try:
             # Parameters
@@ -115,8 +114,8 @@ class CoppeliaSimNode(LifecycleNode):
                 # We wait until we receive all the measurements, and then we invoke the callback
                 ts = message_filters.ApproximateTimeSynchronizer(
                     self._subscribers,
-                    queue_size=10,  # number of messages of each topic we need to receive until we are "completed"
-                    slop=10.0,  # max delay in seconds to consider that 2 messages are able to be syncronized
+                    queue_size=4,  # number of messages of each topic we need to receive until we are "completed"
+                    slop=1,  # max delay in seconds to consider that 2 messages are able to be syncronized
                 )
 
                 # We register the callback that we want to execute once the measurements are received
@@ -224,15 +223,6 @@ class CoppeliaSimNode(LifecycleNode):
                 once=True,  # Log only the first time this function is hit
             )
 
-            # self.get_logger().info(
-            #     f"Estimated: x = {x_h:.2f} m, y = {y_h:.2f} m, "
-            #     f"th = {th_h:.2f} rad ({th_h_deg:.1f}º) | "
-            #     f"Real pose: x = {x:.2f} m, y = {y:.2f} m, th = {th:.2f} rad ({th_deg:.1f}º) | "
-            #     f"Error{' (OK)' if within_tolerance else ''}: "
-            #     f"{position_error:.3f} m, {angle_error:.1f}º",
-            #     skip_first=True,  # Log all but the first time this function is hit
-            # )
-
     def _check_goal(self) -> bool:
         """Checks whether the robot is localized and has reached the goal within tolerance or not.
 
@@ -305,7 +295,12 @@ class CoppeliaSimNode(LifecycleNode):
         self._laserScan_publisher.publish(msg=msg)
 
 
+import cProfile
+import pstats
+
 def main(args=None):
+    profiler = cProfile.Profile()
+    profiler.enable()
     rclpy.init(args=args)
     coppeliasim_node = CoppeliaSimNode()
 
@@ -316,6 +311,8 @@ def main(args=None):
 
     coppeliasim_node.destroy_node()
     rclpy.try_shutdown()
+    profiler.disable()
+    profiler.dump_stats('coppeliasim.prof')
 
 
 if __name__ == "__main__":
