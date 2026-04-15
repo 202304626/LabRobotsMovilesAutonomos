@@ -65,39 +65,24 @@ class PurePursuit:
         # Config params
         v_min = 0.10  # constant velocity, we change it later but rn constant
         v_max = 0.22  # max v vel
+        w_max = 2.50  # Límite seguro de giro máximo (rad/s)
         max_angle = np.pi / 3.5  # max angle
-
         if not hasattr(self, "_is_aligned"):
             self._is_aligned = False
-
         if not self._is_aligned:
-            if (
-                abs(alpha) > max_angle
-            ):  # if the angle is too big, we can not try to go making the circle
-                # Turn in place with max angular velocity, alpha = beta - theta, if alpha positive we need left turn, if negative right turn, this in sim, in real change dirs
-                w = 0.5 * np.sign(alpha)
+            if abs(alpha) > max_angle:
+                # Turn in place with max angular velocity (¡Subido a 2.5!)
+                w = w_max * np.sign(alpha)
                 return 0.0, w
             else:
                 self._is_aligned = True  # we are aligned, we can start moving forward
-
         # Calculate v
-        v_desired = (
-            v_max
-            * (
-                1
-                - abs(alpha)
-                / max_angle  # alpha lower than max_angle, then abs(alpha) / max_angle < 1, so we reduce the speed, if alpha is 0, we can go at max speed
-            )
-        )  # Reduce speed as alpha increases, control in curves
-
+        v_desired = v_max * (1 - abs(alpha) / max_angle)
         v = max(v_min, min(v_desired, v_max))  # Clamp v to [v_min, v_max]
+        w = v * 2 * np.sin(alpha) / l if l > 0 else 0.0
 
-        w = (
-            v * 2 * np.sin(alpha) / l  # subsitute r in the formula
-            if l > 0
-            else 0.0  # if sin alpha is 0, we can go straight, if l is 0, we are at the target.
-        )
-
+        # Clamp w to [-w_max, w_max] para evitar inestabilidad en curvas cerradas
+        w = max(-w_max, min(w, w_max))
         return v, w
 
     @property
