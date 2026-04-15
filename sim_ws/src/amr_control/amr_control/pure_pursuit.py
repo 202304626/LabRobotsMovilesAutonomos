@@ -110,6 +110,7 @@ class PurePursuit:
         """Path setter."""
         self._path = value
         self._is_aligned = False  # reset alignment when a new path is set
+        self._last_closest_idx = 0  # reset last closest index when a new path is set
 
     def _find_closest_point(self, x: float, y: float) -> tuple[tuple[float, float], int]:
         """Find the closest path point to the current robot pose.
@@ -137,13 +138,23 @@ class PurePursuit:
 
         path = np.array(self._path)
 
-        dx = path[:, 0] - x
-        dy = path[:, 1] - y
-        squared_distances = dx**2 + dy**2
-        closest_idx = int(np.argmin(squared_distances))
-        closest_xy = (path[closest_idx][0], path[closest_idx][1])
+        if not hasattr(self, "_last_closest_idx"):
+            self._last_closest_idx = 0
 
-        return closest_xy, closest_idx
+        start_idx = max(0, self._last_closest_idx - 5)
+        end_idx = min(len(path), self._last_closest_idx + 30)
+
+        local_path = path[start_idx:end_idx]
+
+        dx = local_path[:, 0] - x
+        dy = local_path[:, 1] - y
+        squared_distances = dx**2 + dy**2
+
+        local_closest_idx = int(np.argmin(squared_distances))
+        self._last_closest_idx = start_idx + local_closest_idx
+
+        closest_xy = (path[self._last_closest_idx][0], path[self._last_closest_idx][1])
+        return closest_xy, self._last_closest_idx
 
     def _find_target_point(
         self, origin_xy: tuple[float, float], origin_idx: int
