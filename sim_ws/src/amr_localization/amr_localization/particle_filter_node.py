@@ -163,33 +163,53 @@ class ParticleFilterNode(LifecycleNode):
         # Publish
         self._publish_pose_estimate(x_h, y_h, theta_h)
 
+    # def _execute_measurement_step(self, z_scan: list[float]) -> tuple[float, float, float]:
+    #     """Executes and monitors the measurement step (sense) of the particle filter.
+
+    #     Args:
+    #         z_scan: Distance from every LiDAR ray to the closest obstacle [m].
+
+    #     Returns:
+    #         Pose estimate (x_h, y_h, theta_h) [m, m, rad]; inf if cannot be computed.
+    #     """
+    #     pose = (float("inf"), float("inf"), float("inf"))
+
+    #     if not self._localized or not self._steps % self._steps_btw_sense_updates:
+    #         start_time = time.perf_counter()
+    #         ## here? publish?
+    #         self._particle_filter.resample(z_scan)
+    #         sense_time = time.perf_counter() - start_time
+
+    #         self.get_logger().info(f"Sense step time: {sense_time:6.3f} s")
+
+    #         if self._enable_plot:
+    #             self._particle_filter.show("Sense", save_figure=True)
+
+    #     start_time = time.perf_counter()
+    #     self._localized, pose = self._particle_filter.compute_pose()
+    #     clustering_time = time.perf_counter() - start_time
+
+    #     self.get_logger().info(f"Clustering time: {clustering_time:6.3f} s")
+
+    #     return pose
+
     def _execute_measurement_step(self, z_scan: list[float]) -> tuple[float, float, float]:
-        """Executes and monitors the measurement step (sense) of the particle filter.
-
-        Args:
-            z_scan: Distance from every LiDAR ray to the closest obstacle [m].
-
-        Returns:
-            Pose estimate (x_h, y_h, theta_h) [m, m, rad]; inf if cannot be computed.
-        """
         pose = (float("inf"), float("inf"), float("inf"))
-
-        if not self._localized or not self._steps % self._steps_btw_sense_updates:
-            start_time = time.perf_counter()
-            ## here? publish?
+        # VÍA LENTA: Calcular probabilidades y DBSCAN SOLO cada 10 pasos
+        if not self._steps % self._steps_btw_sense_updates:
+            # start_time = time.perf_counter()
             self._particle_filter.resample(z_scan)
-            sense_time = time.perf_counter() - start_time
-
-            self.get_logger().info(f"Sense step time: {sense_time:6.3f} s")
-
-            if self._enable_plot:
-                self._particle_filter.show("Sense", save_figure=True)
-
-        start_time = time.perf_counter()
-        self._localized, pose = self._particle_filter.compute_pose()
-        clustering_time = time.perf_counter() - start_time
-
-        self.get_logger().info(f"Clustering time: {clustering_time:6.3f} s")
+            # sense_time = time.perf_counter() - start_time
+            # self.get_logger().info(f"Sense step time: {sense_time:6.3f} s")
+            # start_time = time.perf_counter()
+            self._localized, pose = self._particle_filter.compute_pose()  # DBSCAN o Media
+            # clustering_time = time.perf_counter() - start_time
+            # self.get_logger().info(f"Clustering time: {clustering_time:6.3f} s")
+        else:
+            # VÍA RÁPIDA: Si no toca resample, pero estamos localizados,
+            # actualizamos la pose usando la media (muy rápido)
+            if self._localized:
+                self._localized, pose = self._particle_filter.compute_pose()
 
         return pose
 
