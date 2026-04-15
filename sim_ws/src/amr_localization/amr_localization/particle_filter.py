@@ -263,11 +263,12 @@ class ParticleFilter:
             probabilities = np.ones(n) / n
             self._localized = False
 
-        rand_numbers = np.random.uniform(0, 1 / n) + np.arange(n) / n
+        n_new = self._particle_count
+
+        rand_numbers = np.random.uniform(0, 1 / n_new) + np.arange(n_new) / n_new
         weight_circle = np.cumsum(probabilities)
         prominent_weights = np.digitize(rand_numbers, weight_circle)
         prominent_weights = np.clip(prominent_weights, 0, len(self._particles) - 1)
-
         self._particles = self._particles[prominent_weights]
 
     def plot(self, axes, orientation: bool = True):
@@ -353,55 +354,45 @@ class ParticleFilter:
         initial_pose_sigma: tuple[float, float, float],
     ) -> np.ndarray:
         """Draws N random valid particles.
-
         The particles are guaranteed to be inside the map and
         can only have the following orientations [0, pi/2, pi, 3*pi/2].
-
         Args:
             particle_count: Number of particles.
             global_localization: First localization if True, pose tracking otherwise.
             initial_pose: Approximate initial robot pose (x, y, theta) for tracking [m, m, rad].
             initial_pose_sigma: Standard deviation of the initial pose guess [m, m, rad].
-
         Returns: A NumPy array of tuples (x, y, theta) [m, m, rad].
-
         """
         particles = np.empty((particle_count, 3), dtype=float)
-
-        # TODO: 3.4. Complete the missing function body with your code.
-
-        # Extract the bounds of the map
         x_min, y_min, x_max, y_max = self._map.bounds()
-
-        # Extract the values needed to create particles
         x_o, y_o, theta_o = initial_pose
         x_o_std, y_o_std, theta_o_std = initial_pose_sigma
+        # BATCH GENERATION: Generamos muchísimas partículas de golpe (5x para compensar las que caen fuera del mapa)
+        batch_size = particle_count * 5
+        valid_count = 0
+        while valid_count < particle_count:
+            if global_localization:
+                # Vectorizado: Generamos miles de coordenadas X, Y y orientaciones en 1 microsegundo
+                batch_x = np.random.uniform(low=x_min, high=x_max, size=batch_size)
+                batch_y = np.random.uniform(low=y_min, high=y_max, size=batch_size)
+                batch_theta = np.random.choice(
+                    [0, np.pi / 2, np.pi, 3 * np.pi / 2], size=batch_size
+                )
+            else:
+                # Vectorizado: Seguimiento Gaussiano
+                batch_x = np.random.normal(loc=x_o, scale=x_o_std, size=batch_size)
+                batch_y = np.random.normal(loc=y_o, scale=y_o_std, size=batch_size)
+                batch_theta = np.random.normal(loc=theta_o, scale=theta_o_std, size=batch_size)
 
-        for i in range(particle_count):
-            valid = False
-
-            while not valid:
-                if global_localization:  # First localization mode
-                    # We create the particle in the bounds of the map using a uniform distribution
-                    particle_x = np.random.uniform(low=x_min, high=x_max)
-                    particle_y = np.random.uniform(low=y_min, high=y_max)
-                    orientation = np.random.choice([0, np.pi / 2, np.pi, 3 * np.pi / 2])
-
-                else:  # Pose tracking mode
-                    # We create the particle near to its position using a normal distribution
-                    particle_x = np.random.normal(loc=x_o, scale=x_o_std)
-                    particle_y = np.random.normal(loc=y_o, scale=y_o_std)
-                    orientation = np.random.normal(loc=theta_o, scale=theta_o_std)
-
-                # If it is in an invalid place, we generate it again
-                if self._map.contains(
-                    (particle_x, particle_y)
-                ):  # If the particle is valid, we store it
-                    particles[i] = [
-                        particle_x,
-                        particle_y,
-                        orientation % (2 * math.pi),
-                    ]  # To normalize and just have values in range [0, 2*pi]
-                    valid = True
-
+            # Filtramos rápidamente las partículas válidas que caen en el mapa libre
+            for i in range(batch_size):
+                if self._map.contains((batch_x[i], batch_y[i])):
+                    particles[valid_count] = [
+                        batch_x[i],
+                        batch_y[i],
+                        batch_theta[i] % (2 * math.pi),
+                    ]
+                    valid_count += 1
+                    if valid_count == particle_count:
+                        return particles
         return particles
