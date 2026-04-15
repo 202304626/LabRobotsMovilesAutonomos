@@ -353,46 +353,46 @@ class ParticleFilter:
         initial_pose: tuple[float, float, float],
         initial_pose_sigma: tuple[float, float, float],
     ) -> np.ndarray:
-        """Draws N random valid particles.
-        The particles are guaranteed to be inside the map and
-        can only have the following orientations [0, pi/2, pi, 3*pi/2].
-        Args:
-            particle_count: Number of particles.
-            global_localization: First localization if True, pose tracking otherwise.
-            initial_pose: Approximate initial robot pose (x, y, theta) for tracking [m, m, rad].
-            initial_pose_sigma: Standard deviation of the initial pose guess [m, m, rad].
-        Returns: A NumPy array of tuples (x, y, theta) [m, m, rad].
-        """
+        """Draws N random valid particles using MASSIVE C++ BATCHING."""
         particles = np.empty((particle_count, 3), dtype=float)
         x_min, y_min, x_max, y_max = self._map.bounds()
         x_o, y_o, theta_o = initial_pose
         x_o_std, y_o_std, theta_o_std = initial_pose_sigma
-        # BATCH GENERATION: Generamos muchísimas partículas de golpe (5x para compensar las que caen fuera del mapa)
+        # Generamos el triple de partículas necesarias para asegurar que filtramos suficientes
         batch_size = particle_count * 5
         valid_count = 0
         while valid_count < particle_count:
             if global_localization:
-                # Vectorizado: Generamos miles de coordenadas X, Y y orientaciones en 1 microsegundo
                 batch_x = np.random.uniform(low=x_min, high=x_max, size=batch_size)
                 batch_y = np.random.uniform(low=y_min, high=y_max, size=batch_size)
                 batch_theta = np.random.choice(
                     [0, np.pi / 2, np.pi, 3 * np.pi / 2], size=batch_size
                 )
             else:
-                # Vectorizado: Seguimiento Gaussiano
                 batch_x = np.random.normal(loc=x_o, scale=x_o_std, size=batch_size)
                 batch_y = np.random.normal(loc=y_o, scale=y_o_std, size=batch_size)
                 batch_theta = np.random.normal(loc=theta_o, scale=theta_o_std, size=batch_size)
+            # Empaquetamos en una matriz Nx2 para C++
+            points_to_check = np.column_stack((batch_x, batch_y))
 
-            # Filtramos rápidamente las partículas válidas que caen en el mapa libre
-            for i in range(batch_size):
-                if self._map.contains((batch_x[i], batch_y[i])):
-                    particles[valid_count] = [
-                        batch_x[i],
-                        batch_y[i],
-                        batch_theta[i] % (2 * math.pi),
-                    ]
-                    valid_count += 1
-                    if valid_count == particle_count:
-                        return particles
+            # ¡MAGIA C++! Devuelve una máscara booleana instantánea
+            valid_mask = self._map.batch_contains(points_to_check)
+
+            # Filtramos con NumPy (Ultrarrápido, cero bucles Python)
+            valid_x = batch_x[valid_mask]
+            valid_y = batch_y[valid_mask]
+            valid_theta = batch_theta[valid_mask]
+
+            # Cuántas partículas válidas hemos conseguido en esta tanda
+            new_valid = len(valid_x)
+            if new_valid > 0:
+                # Cuántas nos faltan para llenar el array
+                needed = particle_count - valid_count
+                take = min(new_valid, needed)
+
+                particles[valid_count : valid_count + take, 0] = valid_x[:take]
+                particles[valid_count : valid_count + take, 1] = valid_y[:take]
+                particles[valid_count : valid_count + take, 2] = valid_theta[:take] % (2 * math.pi)
+
+                valid_count += take
         return particles

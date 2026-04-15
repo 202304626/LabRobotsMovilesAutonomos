@@ -382,51 +382,50 @@ class PRM:
     def _generate_nodes(
         self, use_grid: bool = False, node_count: int = 50, grid_size=0.1
     ) -> dict[tuple[float, float], list[tuple[float, float]]]:
-        """Creates a set of valid nodes to build a roadmap with.
-
-        Args:
-            use_grid: Sample from a uniform distribution when False.
-                Use a fixed step grid layout otherwise.
-            node_count: Number of random nodes to generate. Only considered if use_grid is False.
-            grid_size: If use_grid is True, distance between consecutive nodes in x and y.
-
-        Returns: A dictionary with (x, y) [m] tuples as keys and empty lists as values.
-            Key elements are rounded to a fixed number of decimal places to allow comparisons.
-
-        """
+        """Creates a set of valid nodes to build a roadmap with using C++ BATCHING."""
         graph: dict[tuple[float, float], list[tuple[float, float]]] = {}
-
-        # TODO: 4.1. Complete the missing function body with your code.
         x_min, y_min, x_max, y_max = self._map.bounds()
-
         if use_grid:
             grid = np.mgrid[
                 x_min : x_max + grid_size : grid_size,
                 y_min : y_max + grid_size : grid_size,
             ]
-            for x in grid[0].flat:
-                for y in grid[1].flat:
-                    if self._map.contains((x, y)):
-                        graph[(x, y)] = []
+            # Para el grid, empaquetamos todos los puntos y los filtramos de golpe
+            xs = grid[0].flatten()
+            ys = grid[1].flatten()
+            points_to_check = np.column_stack((xs, ys))
+
+            valid_mask = self._map.batch_contains(points_to_check)
+
+            valid_xs = xs[valid_mask]
+            valid_ys = ys[valid_mask]
+
+            for vx, vy in zip(valid_xs, valid_ys):
+                graph[(vx, vy)] = []
+
         else:
-            # BATCH GENERATION: Generamos nodos en masa para aniquilar el bucle lento de Python
-            batch_size = node_count * 5
+            batch_size = node_count * 3
             valid_count = 0
             while valid_count < node_count:
-                # Array de NumPy con las posiciones aleatorias de golpe
                 batch_x = np.random.uniform(low=x_min, high=x_max, size=batch_size)
                 batch_y = np.random.uniform(low=y_min, high=y_max, size=batch_size)
-                for i in range(batch_size):
-                    particle_x = batch_x[i]
-                    particle_y = batch_y[i]
-                    # Si no colisiona, lo añadimos al grafo
-                    if self._map.contains((particle_x, particle_y)):
-                        # Usar tuplas evita problemas de hasheo con las keys del diccionario
-                        graph[(particle_x, particle_y)] = []
-                        valid_count += 1
-                        if valid_count == node_count:
-                            return graph
+                points_to_check = np.column_stack((batch_x, batch_y))
 
+                # ¡MAGIA C++!
+                valid_mask = self._map.batch_contains(points_to_check)
+
+                valid_xs = batch_x[valid_mask]
+                valid_ys = batch_y[valid_mask]
+
+                new_valid = len(valid_xs)
+                if new_valid > 0:
+                    needed = node_count - valid_count
+                    take = min(new_valid, needed)
+
+                    for vx, vy in zip(valid_xs[:take], valid_ys[:take]):
+                        graph[(vx, vy)] = []
+
+                    valid_count += take
         return graph
 
     def _reconstruct_path(
