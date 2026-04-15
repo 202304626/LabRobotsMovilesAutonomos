@@ -4,6 +4,7 @@ import os
 import pytz
 import random
 import time
+from scipy.spatial import cKDTree
 
 # This try-except enables local debugging of the PRM class
 try:
@@ -210,25 +211,21 @@ class PRM:
 
             path = new_path
 
-        smoothed_path: list[tuple[float, float]] = []
-        s = np.array(path)
-
+        path_arr = np.array(path)
+        s = np.copy(path_arr)
         while True:
             s_anterior = np.copy(s)
-            smoothed_path: list[tuple[float, float]] = [s[0]]
-            for i in range(1, len(path) - 1):
-                p_i = path[i]
 
-                s[i] = (
-                    s[i]
-                    + data_weight * (np.array(p_i) - np.array(s[i]))
-                    + smooth_weight * (s[i + 1] + s[i - 1] - 2 * s[i])
-                )
-                smoothed_path.append(s[i])
-
+            # ¡Vectorización de NumPy! Actualizamos todos los puntos interiores de golpe
+            # s[1:-1] representa todos los puntos menos el primero y el último
+            s[1:-1] = (
+                s[1:-1]
+                + data_weight * (path_arr[1:-1] - s[1:-1])
+                + smooth_weight * (s[2:] + s[:-2] - 2 * s[1:-1])
+            )
+            # Comprobación de convergencia
             if np.sum(np.abs(s_anterior - s)) < tolerance:
-                smoothed_path.append(s[-1])
-                return smoothed_path
+                return [tuple(p) for p in s]
 
     def plot(
         self,
@@ -340,27 +337,21 @@ class PRM:
         graph: dict[tuple[float, float], list[tuple[float, float]]],
         connection_distance: float = 0.15,
     ) -> dict[tuple[float, float], list[tuple[float, float]]]:
-        """Connects every generated node with all the nodes that are closer than a given threshold.
-
-        Args:
-            graph: A dictionary with (x, y) [m] tuples as keys and empty lists as values.
-            connection_distance: Maximum distance to consider adding an edge between two nodes [m].
-
-        Returns: A modified graph with lists of connected nodes as values.
-
-        """
-        # TODO: 4.2. Complete the missing function body with your code.
-
-        for node in graph.keys():
-            for other_node in graph.keys():
-                if node != other_node:
-                    distance = np.linalg.norm(np.array(node) - np.array(other_node))
-                    if (  # Change for cross
-                        distance <= connection_distance
-                        and not self._map.crosses([node, other_node])
-                    ):
-                        graph[node].append(other_node)
-
+        """Connects nodes using a KDTree for massive performance improvement."""
+        nodes = list(graph.keys())
+        if not nodes:
+            return graph
+        # KDTree aniquila la búsqueda O(N^2)
+        tree = cKDTree(nodes)
+        # Devuelve un set de pares de índices (i, j) que están a menos de connection_distance
+        pairs = tree.query_pairs(connection_distance)
+        for i, j in pairs:
+            node1 = nodes[i]
+            node2 = nodes[j]
+            # Solo comprobamos la intersección si sabemos que están cerca
+            if not self._map.crosses([node1, node2]):
+                graph[node1].append(node2)
+                graph[node2].append(node1)  # El grafo es bidireccional
         return graph
 
     def _create_graph(
