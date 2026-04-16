@@ -108,6 +108,8 @@ class ParticleFilter:
         self._kld_delta: float = kld_delta  # Probability bound
         self._kld_bin_size: float = kld_bin_size  # Spatial discretization
 
+        # Use original localized_particle_count for compatibility
+        self._localized_particle_count: int = 400
         self._localized = False
 
         #######################################
@@ -154,8 +156,8 @@ class ParticleFilter:
             # 1. Calculamos la dispersión (Desviación estándar de las posiciones)
             std_x = np.std(self._particles[:, 0])
             std_y = np.std(self._particles[:, 1])
-            # Umbral de seguridad: si las partículas se separan más de 30cm, nos hemos perdido
-            if std_x < 0.3 and std_y < 0.3:
+            # ¡Importante! No re-inundamos el mapa, solo volvemos a usar clustering
+            if std_x < 0.4 and std_y < 0.4:
                 x_mean = np.mean(self._particles[:, 0])
                 y_mean = np.mean(self._particles[:, 1])
                 theta_mean = math.atan2(
@@ -167,45 +169,37 @@ class ParticleFilter:
                 self._localized = False
                 if self._logger:
                     self._logger.warn(
-                        "Pérdida de convergencia. Re-inundando el mapa con partículas..."
+                        "Pérdida de convergencia, re-activando clustering (Sin re-esparcir)"
                     )
 
-                # --- EXPANSIÓN (Up-sampling): Volvemos a llenar el mapa ---
-                self._particles = self._init_particles(
-                    self._initial_particle_count,
-                    global_localization=True,
-                    initial_pose=(0.0, 0.0, 0.0),
-                    initial_pose_sigma=(0.0, 0.0, 0.0),
-                )
-                self._particle_count = self._initial_particle_count
-
-                # Como acabamos de re-esparcir, no devolvemos una pose válida todavía
-                return False, (float("nan"), float("nan"), float("nan"))
-
-        # --- MODO LOCALIZACIÓN (CLUSTERING) ---
+        # --- MODO LOCALIZACIÓN (CLUSTERING EN 2D) ---
         # Solo llegamos aquí si self._localized es False
-        particles_projected = np.array(self._particles, dtype=float)
-        theta = particles_projected[:, -1]
-        particles_projected = np.hstack(
-            [particles_projected[:, :-1], np.cos(theta)[:, None], np.sin(theta)[:, None]]
-        )
+        # IMPORTANTE: Clustering en 2D (x, y) solamente - más robusto que 4D
+        particles_projected = self._particles[:, :2]  # Solo posición (x, y)
 
         # Use HDBSCAN if available (10-50x faster), otherwise fallback to DBSCAN
         if HDBSCAN_AVAILABLE:
             # HDBSCAN: Hierarchical, no eps parameter needed, auto-detects clusters
+            # En 2D, eps puede ser más pequeño y más selectivo
             clusterer = hdbscan.HDBSCAN(
-                min_cluster_size=10,
-                min_samples=5,
-                cluster_selection_epsilon=0.2,  # Similar to DBSCAN eps
-                core_dist_n_jobs=-1  # Use all CPU cores
+                min_cluster_size=5,
+                min_samples=3,
+                cluster_selection_epsilon=0.15,  # Ajustado para 2D (más estricto que 4D)
+                core_dist_n_jobs=-1,  # Use all CPU cores
+                algorithm='best'
             )
             clustering = clusterer.fit(particles_projected)
             labels = clustering.labels_
-            # HDBSCAN doesn't have core_sample_indices_, use all non-noise particles
-            indexes = np.where(labels >= 0)[0]
+            # Get core samples only (probabilities_ > 0 are core members)
+            if hasattr(clustering, 'probabilities_'):
+                indexes = np.where((labels >= 0) & (clustering.probabilities_ > 0))[0]
+            else:
+                # Fallback: use all cluster members
+                indexes = np.where(labels >= 0)[0]
         else:
             # Fallback to sklearn DBSCAN (slower)
-            clustering = DBSCAN(eps=0.2, min_samples=10).fit(particles_projected)
+            # En 2D, eps=0.15-0.2 es apropiado (más pequeño que en 4D)
+            clustering = DBSCAN(eps=0.15, min_samples=5).fit(particles_projected)
             labels = clustering.labels_
             indexes = clustering.core_sample_indices_
 
@@ -213,10 +207,10 @@ class ParticleFilter:
         if n_clusters == 1:
             self._localized = True  # ¡Lo encontramos!
             cluster_particles = self._particles[indexes]
-            # --- REDUCCIÓN DE PARTÍCULAS (Down-sampling final) ---
-            if len(cluster_particles) > self._min_particles:
+            # Reducción SEGURA - usar localized_particle_count como original
+            if len(cluster_particles) > self._localized_particle_count:
                 indices_elegidos = np.random.choice(
-                    len(cluster_particles), self._min_particles, replace=False
+                    len(cluster_particles), self._localized_particle_count, replace=False
                 )
                 # IMPORTANTE: ascontiguousarray evita el crasheo en C++
                 self._particles = np.ascontiguousarray(cluster_particles[indices_elegidos])
@@ -231,15 +225,35 @@ class ParticleFilter:
             ) % (2 * math.pi)
             return True, (x_mean, y_mean, theta_mean)
         elif n_clusters > 1:
-            # --- REDUCCIÓN PROGRESIVA (KLD-Sampling aproximado) ---
-            particulas_validas = self._particles[labels != -1]
-            cantidad_deseada = max(int(200 * n_clusters), self._min_particles)
-            if len(particulas_validas) > cantidad_deseada:
-                indices = np.random.choice(len(particulas_validas), cantidad_deseada, replace=False)
-                self._particles = np.ascontiguousarray(particulas_validas[indices])
-            elif len(particulas_validas) > 0:
-                self._particles = np.ascontiguousarray(particulas_validas)
-            self._particle_count = len(self._particles)
+            # 1. Decidir cuántas partículas queremos mantener en esta iteración.
+            # Por ejemplo, 100 por cada clúster, con un mínimo de 400 y un máximo de 3000.
+            target_count = min(
+                self._initial_particle_count,
+                max(int(100 * n_clusters), self._localized_particle_count),
+            )
+
+            # 2. Si el array actual es más grande que nuestro objetivo, lo reducimos físicamente.
+            if len(self._particles) > target_count:
+                # Extraemos todas las partículas que el clustering consideró parte de algún clúster (labels != -1)
+                core_particles = self._particles[labels != -1]
+
+                if len(core_particles) > target_count:
+                    # Si hay demasiadas partículas "buenas", nos quedamos con una muestra aleatoria
+                    indices_elegidos = np.random.choice(
+                        len(core_particles), target_count, replace=False
+                    )
+                    self._particles = np.ascontiguousarray(core_particles[indices_elegidos])
+                elif len(core_particles) > 0:
+                    # Si hay menos partículas "buenas" que el target, nos quedamos con todas ellas
+                    self._particles = np.ascontiguousarray(core_particles)
+
+                # Actualizamos el contador oficial
+                self._particle_count = len(self._particles)
+
+                if self._logger:
+                    self._logger.info(
+                        f"Reduciendo partículas gradualmente: {n_clusters} clústeres -> {self._particle_count} partículas"
+                    )
         return False, (float("nan"), float("nan"), float("nan"))
 
     def move(self, v: float, w: float) -> None:

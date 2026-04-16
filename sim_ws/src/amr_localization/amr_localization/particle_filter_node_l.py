@@ -36,8 +36,8 @@ import time
 import traceback
 from transforms3d.euler import euler2quat
 
-# IMPORTANT: Use optimized particle filter
-from amr_localization.particle_filter_l import ParticleFilter
+# Import particle filter (works when you copy particle_filter_l.py → particle_filter.py)
+from amr_localization.particle_filter import ParticleFilter
 
 
 class ParticleFilterNode(LifecycleNode):
