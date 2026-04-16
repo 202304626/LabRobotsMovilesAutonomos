@@ -66,7 +66,7 @@ class ParticleFilter:
         self._simulation: bool = simulation
         self._iteration: int = 0
 
-        self._localized_particle_count: int = 25
+        self._localized_particle_count: int = 50
         self._localized = False
 
         #######################################
