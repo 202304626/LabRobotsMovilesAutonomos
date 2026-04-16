@@ -73,7 +73,7 @@ class PurePursuit:
             if abs(alpha) > max_angle:
                 # Turn in place with max angular velocity (¡Subido a 2.5!)
                 w = w_max * np.sign(alpha)
-                return 0.0, w
+                return 0.0, float(w)
             else:
                 self._is_aligned = True  # we are aligned, we can start moving forward
         # Calculate v
@@ -83,7 +83,7 @@ class PurePursuit:
 
         # Clamp w to [-w_max, w_max] para evitar inestabilidad en curvas cerradas
         w = max(-w_max, min(w, w_max))
-        return v, w
+        return float(v), float(w)
 
     @property
     def path(self) -> list[tuple[float, float]]:
@@ -111,16 +111,6 @@ class PurePursuit:
 
         """
         # TODO: 4.9. Complete the function body (i.e., find closest_xy and closest_idx).
-        """closest_xy = (0.0, 0.0)
-        closest_idx = 0
-
-        path = self._path
-
-        closest_xy = min(
-            path,
-            key=lambda point: np.linalg.norm(np.array(point) - np.array((x, y))),
-        )
-        closest_idx = path.index(closest_xy)"""
 
         path = self._path_arr
 
