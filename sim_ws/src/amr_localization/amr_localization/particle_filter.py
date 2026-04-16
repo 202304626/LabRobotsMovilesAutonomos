@@ -36,6 +36,10 @@ class ParticleFilter:
         initial_pose_sigma: tuple[float, float, float] = (float("nan"), float("nan"), float("nan")),
         logger=None,
         simulation: bool = False,
+        use_kld_sampling: bool = True,
+        kld_epsilon: float = 0.05,
+        kld_delta: float = 0.01,
+        kld_bin_size: float = 0.2,
     ):
         """Particle filter class initializer.
 
@@ -53,6 +57,10 @@ class ParticleFilter:
             initial_pose_sigma: Standard deviation of the initial pose guess [m, m, rad].
             logger: Logger object to output messages with different severity levels.
             simulation: True if running in simulation, False if running on the real robot.
+            use_kld_sampling: Enable KLD-Sampling for adaptive particle count.
+            kld_epsilon: Maximum error allowed in particle approximation (default: 0.05).
+            kld_delta: Upper bound on probability that error exceeds epsilon (default: 0.01).
+            kld_bin_size: Spatial bin size for discretization [m] (default: 0.2m).
 
         """
         self._dt: float = dt
@@ -60,6 +68,7 @@ class ParticleFilter:
         self._logger = logger
         self._particle_count: int = particle_count
         self._min_particles: int = min_particles
+        self._max_particles: int = particle_count  # Max for KLD-Sampling
 
         self._sensor_range_max: float = sensor_range_max
         self._sensor_range_min: float = sensor_range_min
@@ -68,6 +77,12 @@ class ParticleFilter:
         self._sigma_z: float = sigma_z
         self._simulation: bool = simulation
         self._iteration: int = 0
+
+        # KLD-Sampling parameters
+        self._use_kld_sampling: bool = use_kld_sampling
+        self._kld_epsilon: float = kld_epsilon  # Max error allowed
+        self._kld_delta: float = kld_delta  # Probability bound
+        self._kld_bin_size: float = kld_bin_size  # Spatial discretization
 
         # self._localized_particle_count: int = 50
         self._localized = False
@@ -198,30 +213,121 @@ class ParticleFilter:
             self._particles, v, w, self._dt, self._sigma_v, self._sigma_w
         )
 
-    def resample(self, measurements: list[float]) -> None:
-        """Samples a new set of particles using full C++ acceleration."""
-        # --- INICIO CRONÓMETRO GLOBAL ---
+    def _kld_particle_count(self, particles: np.ndarray) -> int:
+        """Computes adaptive particle count using KLD-Sampling algorithm.
 
+        Based on: Dieter Fox, "Adapting the Sample Size in Particle Filters
+        Through KLD-Sampling", IJRR 2003.
+
+        Args:
+            particles: Current particle set (N, 3) with [x, y, theta].
+
+        Returns:
+            Optimal number of particles to maintain given the current distribution.
+        """
+        if not self._use_kld_sampling:
+            return len(particles)
+
+        # Discretize particles into spatial bins
+        bin_size = self._kld_bin_size
+        bins_set = set()
+
+        for particle in particles:
+            x, y, theta = particle
+            # Create bin indices (spatial + angular)
+            bin_x = int(np.floor(x / bin_size))
+            bin_y = int(np.floor(y / bin_size))
+            # Angular discretization: 8 bins (45° each)
+            bin_theta = int(np.floor(theta / (2 * np.pi / 8)))
+
+            bins_set.add((bin_x, bin_y, bin_theta))
+
+        k = len(bins_set)  # Number of occupied bins
+
+        if k <= 1:
+            # Very concentrated → use minimum particles
+            return self._min_particles
+
+        # KLD-Sampling formula (Fox 2003)
+        # n = (k / (2*epsilon)) * (1 - 2/(9*k) + sqrt(2/(9*k)) * z)^3
+        # where z = quantile of standard normal for probability (1 - delta)
+
+        z = norm.ppf(1.0 - self._kld_delta)  # Typically ~2.33 for delta=0.01
+
+        # Compute particle count
+        k_minus_1 = k - 1
+        term = 1.0 - 2.0 / (9.0 * k_minus_1) + np.sqrt(2.0 / (9.0 * k_minus_1)) * z
+        n = (k_minus_1 / (2.0 * self._kld_epsilon)) * (term ** 3)
+
+        # Clamp to valid range
+        n_clamped = int(np.clip(n, self._min_particles, self._max_particles))
+
+        # Log if significant change
+        if self._logger and abs(n_clamped - len(particles)) > 100:
+            self._logger.info(
+                f"KLD-Sampling: {len(particles)} → {n_clamped} particles "
+                f"(bins={k}, localized={self._localized})"
+            )
+
+        return n_clamped
+
+    def resample(self, measurements: list[float]) -> None:
+        """Samples a new set of particles using full C++ acceleration with KLD-Sampling."""
         self._iteration += 1
         n = self._particles.shape[0]
-        # 1. Definimos los índices
-        ray_indices = list(range(0, 240, 240 // 8))
-        # --- CRONÓMETRO RAYCASTING ---
 
+        # 1. Raycasting for all particles
+        ray_indices = list(range(0, 240, 240 // 8))
         all_z_hat = amr_localization_cpp.batch_raycasting(
             self._particles, ray_indices, 1.5, -0.035, self._sensor_range_max
         )
 
-        # Preparamos los arrays para pasar a C++
+        # 2. Compute weights
         z_real = np.array([measurements[i] for i in ray_indices], dtype=np.float64)
         probabilities = np.zeros(n, dtype=np.float64)
 
         amr_localization_cpp.compute_weights(
             probabilities, z_real, all_z_hat, self._sigma_z, self._sensor_range_min
         )
+
         if np.sum(probabilities) == 0:
             self._localized = False
+
+        # 3. Standard resampling
         amr_localization_cpp.resample_particles(self._particles, probabilities)
+
+        # 4. KLD-Sampling: Adaptive particle count adjustment
+        if self._use_kld_sampling:
+            optimal_count = self._kld_particle_count(self._particles)
+            current_count = len(self._particles)
+
+            if optimal_count < current_count:
+                # Down-sampling: Reduce particles
+                indices = np.random.choice(current_count, optimal_count, replace=False)
+                self._particles = np.ascontiguousarray(self._particles[indices])
+                self._particle_count = optimal_count
+
+            elif optimal_count > current_count:
+                # Up-sampling: Duplicate particles with noise
+                additional_needed = optimal_count - current_count
+                # Randomly select particles to duplicate
+                duplicate_indices = np.random.choice(current_count, additional_needed, replace=True)
+                duplicates = self._particles[duplicate_indices].copy()
+
+                # Add small Gaussian noise to avoid identical particles
+                noise_x = np.random.normal(0, 0.05, additional_needed)
+                noise_y = np.random.normal(0, 0.05, additional_needed)
+                noise_theta = np.random.normal(0, 0.1, additional_needed)
+
+                duplicates[:, 0] += noise_x
+                duplicates[:, 1] += noise_y
+                duplicates[:, 2] = (duplicates[:, 2] + noise_theta) % (2 * np.pi)
+
+                # Concatenate original + duplicates
+                self._particles = np.ascontiguousarray(
+                    np.vstack([self._particles, duplicates])
+                )
+                self._particle_count = optimal_count
 
     def plot(self, axes, orientation: bool = True):
         """Draws particles.

@@ -42,6 +42,11 @@ class ParticleFilterNode(LifecycleNode):
         self.declare_parameter("steps_btw_sense_updates", 10)
         self.declare_parameter("world", "lab03")
         self.declare_parameter("min_particles", 100)
+        # KLD-Sampling parameters
+        self.declare_parameter("use_kld_sampling", True)
+        self.declare_parameter("kld_epsilon", 0.05)
+        self.declare_parameter("kld_delta", 0.01)
+        self.declare_parameter("kld_bin_size", 0.2)
 
     def on_configure(self, state: LifecycleState) -> TransitionCallbackReturn:
         """Handles a configuring transition.
@@ -83,6 +88,13 @@ class ParticleFilterNode(LifecycleNode):
                 os.path.join(os.path.dirname(__file__), "..", "maps", world + ".json")
             )
             min_particles = self.get_parameter("min_particles").get_parameter_value().integer_value
+
+            # KLD-Sampling parameters
+            use_kld_sampling = self.get_parameter("use_kld_sampling").get_parameter_value().bool_value
+            kld_epsilon = self.get_parameter("kld_epsilon").get_parameter_value().double_value
+            kld_delta = self.get_parameter("kld_delta").get_parameter_value().double_value
+            kld_bin_size = self.get_parameter("kld_bin_size").get_parameter_value().double_value
+
             self._particle_filter = ParticleFilter(
                 dt,
                 map_path,
@@ -96,6 +108,10 @@ class ParticleFilterNode(LifecycleNode):
                 initial_pose_sigma=initial_pose_sigma,
                 simulation=self._simulation,
                 logger=self.get_logger(),  # Replace None with self.get_logger() to enable logging in the class
+                use_kld_sampling=use_kld_sampling,
+                kld_epsilon=kld_epsilon,
+                kld_delta=kld_delta,
+                kld_bin_size=kld_bin_size,
             )
 
             if self._enable_plot:

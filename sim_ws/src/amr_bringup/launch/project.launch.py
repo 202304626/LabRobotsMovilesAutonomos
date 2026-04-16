@@ -25,11 +25,17 @@ def generate_launch_description():
                 "enable_plot": False,
                 "global_localization": True,
                 "particles": 3000,
+                "min_particles": 200,  # Minimum when localized
                 "sigma_v": 0.05,
                 "sigma_w": 0.1,
                 "sigma_z": 0.2,
                 "simulation": simulation,
                 "world": world,
+                # KLD-Sampling configuration
+                "use_kld_sampling": True,
+                "kld_epsilon": 0.05,  # Max error allowed (smaller = more particles)
+                "kld_delta": 0.01,  # Confidence level (1% chance of exceeding epsilon)
+                "kld_bin_size": 0.2,  # Spatial discretization [m]
             }
         ],
     )
