@@ -295,12 +295,7 @@ class CoppeliaSimNode(LifecycleNode):
         self._laserScan_publisher.publish(msg=msg)
 
 
-import cProfile
-import pstats
-
 def main(args=None):
-    profiler = cProfile.Profile()
-    profiler.enable()
     rclpy.init(args=args)
     coppeliasim_node = CoppeliaSimNode()
 
@@ -311,9 +306,10 @@ def main(args=None):
 
     coppeliasim_node.destroy_node()
     rclpy.try_shutdown()
-    profiler.disable()
-    profiler.dump_stats('coppeliasim.prof')
 
+
+if __name__ == "__main__":
+    main()
 
 if __name__ == "__main__":
     main()
