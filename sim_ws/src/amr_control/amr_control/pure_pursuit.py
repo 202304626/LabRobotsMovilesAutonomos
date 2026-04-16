@@ -64,9 +64,9 @@ class PurePursuit:
         ## OPTIMIZACION
         # Config params
         v_min = 0.10  # constant velocity, we change it later but rn constant
-        v_max = 0.22  # max v vel
-        w_max = 2.50  # Límite seguro de giro máximo (rad/s)
-        max_angle = np.pi / 3.5  # max angle
+        v_max = 0.20  # max v vel
+        w_max = 2.00  # Límite seguro de giro máximo (rad/s)
+        max_angle = np.pi / 4  # max angle
         if not hasattr(self, "_is_aligned"):
             self._is_aligned = False
         if not self._is_aligned:
@@ -77,12 +77,16 @@ class PurePursuit:
             else:
                 self._is_aligned = True  # we are aligned, we can start moving forward
         # Calculate v
-        v_desired = v_max * (1 - abs(alpha) / max_angle)
+        v_desired = v_max * (1 - (abs(alpha) / max_angle) ** 2)
         v = max(v_min, min(v_desired, v_max))  # Clamp v to [v_min, v_max]
         w = v * 2 * np.sin(alpha) / l if l > 0 else 0.0
 
         # Clamp w to [-w_max, w_max] para evitar inestabilidad en curvas cerradas
         w = max(-w_max, min(w, w_max))
+        max_v_admissible = 0.22 - 0.08 * abs(w)
+        v = min(v, max_v_admissible)
+        v = max(0.0, v)  # Nunca negativo
+
         return float(v), float(w)
 
     @property
