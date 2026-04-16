@@ -1,5 +1,7 @@
 import numpy as np
 
+from amr_control import amr_control_cpp
+
 
 class PurePursuit:
     """Class to follow a path using a simple pure pursuit controller."""
@@ -29,60 +31,26 @@ class PurePursuit:
         self._is_aligned = False
 
     def compute_commands(self, x: float, y: float, theta: float) -> tuple[float, float]:
-        """Pure pursuit controller implementation.
-
-        Args:
-            x: Estimated robot x coordinate [m].
-            y: Estimated robot y coordinate [m].
-            theta: Estimated robot heading [rad].
-
-        Returns:
-            v: Linear velocity [m/s].
-            w: Angular velocity [rad/s].
-
-        """
-        # TODO: 4.11. Complete the function body with your code (i.e., compute v and w).
-
         if not self._path or len(self._path) == 0:
-            # Si no hay ruta, velocidad 0 y giro 0
             return 0.0, 0.0
-
-        # here we are going to apply the pure suit formula to get angular vel
-        L = self._find_target_point((x, y), self._find_closest_point(x, y)[1])
-
-        vector_to_target = np.array(L) - np.array((x, y))
-        l = np.linalg.norm(vector_to_target)
-
-        raw_alpha = np.arctan2(vector_to_target[1], vector_to_target[0]) - theta
-        alpha = (raw_alpha + np.pi) % (2 * np.pi) - np.pi  # Normalize to [-pi, pi]
-
-        """if self._logger is not None:
-            self._logger.warning(
-                f"Robot pose: x = {x:.3f} m, y = {y:.3f} m, theta = {theta:.3f} rad"
-            )"""
-
-        ## OPTIMIZACION
-        # Config params
-        v_min = 0.10  # constant velocity, we change it later but rn constant
-        v_max = 0.22  # max v vel
-        w_max = 2.50  # Límite seguro de giro máximo (rad/s)
-        max_angle = np.pi / 3.5  # max angle
-        if not hasattr(self, "_is_aligned"):
+        if not hasattr(self, "_last_closest_idx"):
+            self._last_closest_idx = 0
             self._is_aligned = False
-        if not self._is_aligned:
-            if abs(alpha) > max_angle:
-                # Turn in place with max angular velocity (¡Subido a 2.5!)
-                w = w_max * np.sign(alpha)
-                return 0.0, w
-            else:
-                self._is_aligned = True  # we are aligned, we can start moving forward
-        # Calculate v
-        v_desired = v_max * (1 - abs(alpha) / max_angle)
-        v = max(v_min, min(v_desired, v_max))  # Clamp v to [v_min, v_max]
-        w = v * 2 * np.sin(alpha) / l if l > 0 else 0.0
-
-        # Clamp w to [-w_max, w_max] para evitar inestabilidad en curvas cerradas
-        w = max(-w_max, min(w, w_max))
+        # MAGIA C++ (Súper rápido)
+        v, w, closest_idx, is_aligned = amr_control_cpp.compute_pure_pursuit(
+            x,
+            y,
+            theta,
+            self._path_arr,  # Ya es contiguous array
+            self._last_closest_idx,
+            self._lookahead_distance,
+            0.22,  # v_max
+            0.10,  # v_min
+            2.50,  # w_max
+            self._is_aligned,
+        )
+        self._last_closest_idx = closest_idx
+        self._is_aligned = is_aligned
         return v, w
 
     @property

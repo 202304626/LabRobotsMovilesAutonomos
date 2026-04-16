@@ -3,6 +3,8 @@ import random
 import numpy as np
 import math
 
+from amr_control import amr_control_cpp
+
 states = enum.Enum("states", "Front Turn_Right Turn_Left")
 
 
@@ -74,18 +76,9 @@ class WallFollower:
         """
 
         # TODO: 2.14. Complete the function body with your code (i.e., compute v and w).
-
-        # Front distance: rays 0-5 and last 5 rays (front of the robot)
-        self._front_dist = self._safe_min(list(z_scan[0:5]) + list(z_scan[-5:]))
-
-        # Right distance: rays around 3/4 of the array (right side)
-        self._right_dist = self._safe_min(
-            z_scan[(3 * len(z_scan) // 4) - 5 : (3 * len(z_scan) // 4) + 5]
-        )
-
-        # Left distance: rays around 1/4 of the array (left side)
-        self._left_dist = self._safe_min(
-            z_scan[(1 * len(z_scan) // 4) - 5 : (1 * len(z_scan) // 4) + 5]
+        scan_arr = np.ascontiguousarray(z_scan, dtype=np.float64)
+        self._front_dist, self._right_dist, self._left_dist = (
+            amr_control_cpp.compute_wall_distances(scan_arr)
         )
 
         try:
