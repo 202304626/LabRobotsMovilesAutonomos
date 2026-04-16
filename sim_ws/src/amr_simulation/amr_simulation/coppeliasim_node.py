@@ -70,6 +70,9 @@ class CoppeliaSimNode(LifecycleNode):
             self._robot = TurtleBot3Burger(self._coppeliasim.sim, dt)
             self._localized = False
 
+            self._latest_cmd_vel = TwistStamped()
+            self._latest_pose = PoseStamped()
+
             # Publishers
             # TODO: 2.4. Create the /odometry (Odometry message) and /scan (LaserScan) publishers.
             self._odometry_publisher = self.create_publisher(
@@ -83,43 +86,15 @@ class CoppeliaSimNode(LifecycleNode):
             )
 
             # Subscribers
-            if (
-                not enable_localization
-            ):  # In this case we go to the callback with just a TwistStamped (cmd_vel) message
-                # TODO: 2.12. Subscribe to /cmd_vel. Connect it with with _next_step_callback.
-                self._cmd_vel_suscriber = self.create_subscription(
-                    TwistStamped, "cmd_vel", self._next_step_callback, 10
+            self._cmd_vel_suscriber = self.create_subscription(
+                TwistStamped, "cmd_vel", self._cmd_vel_callback, 10
+            )
+            if enable_localization:
+                self._pose_subscriber = self.create_subscription(
+                    PoseStamped, "pose", self._pose_callback, 10
                 )
-
-            # TODO: 3.3. Sync the /pose and /cmd_vel subscribers if enable_localization is True.
-            else:
-                # In this case we want to use the callback with both messages, with synchronization:
-                # We define an empty list of suscribers
-                self._subscribers: list[message_filters.Subscriber] = []
-
-                # Append the cmd vel suscriber
-                self._subscribers.append(
-                    message_filters.Subscriber(
-                        self, TwistStamped, "cmd_vel", qos_profile=QoSProfile(depth=10)
-                    )
-                )
-
-                # Append the pose suscriber
-                self._subscribers.append(
-                    message_filters.Subscriber(
-                        self, PoseStamped, "pose", qos_profile=QoSProfile(depth=10)
-                    )
-                )
-
-                # We wait until we receive all the measurements, and then we invoke the callback
-                ts = message_filters.ApproximateTimeSynchronizer(
-                    self._subscribers,
-                    queue_size=4,  # number of messages of each topic we need to receive until we are "completed"
-                    slop=1,  # max delay in seconds to consider that 2 messages are able to be syncronized
-                )
-
-                # We register the callback that we want to execute once the measurements are received
-                ts.registerCallback(self._next_step_callback)
+            # 3. El Corazón: Timer implacable a frecuencia "dt" (20Hz)
+            self._sim_timer = self.create_timer(dt, self._timer_callback)
 
         except Exception:
             self.get_logger().error(f"{traceback.format_exc()}")
@@ -136,13 +111,13 @@ class CoppeliaSimNode(LifecycleNode):
         """
         # self.get_logger().info(f"Transitioning from '{state.label}' to 'active' state.")
 
-        try:
-            # Initial method calls
-            self._next_step_callback(cmd_vel_msg=TwistStamped())
+        # try:
+        #     # Initial method calls
+        #     self._next_step_callback(cmd_vel_msg=TwistStamped())
 
-        except Exception:
-            self.get_logger().error(f"{traceback.format_exc()}")
-            return TransitionCallbackReturn.ERROR
+        # except Exception:
+        #     self.get_logger().error(f"{traceback.format_exc()}")
+        #     return TransitionCallbackReturn.ERROR
 
         return super().on_activate(state)
 
@@ -152,6 +127,35 @@ class CoppeliaSimNode(LifecycleNode):
             self._coppeliasim.stop_simulation()
         except AttributeError:
             pass
+
+    def _cmd_vel_callback(self, msg: TwistStamped) -> None:
+        """Subscriber callback. Guarda el último comando recibido."""
+        self._latest_cmd_vel = msg
+
+    def _pose_callback(self, msg: PoseStamped) -> None:
+        """Subscriber callback. Guarda la última pose estimada."""
+        self._latest_pose = msg
+
+    def _timer_callback(self):
+        # Cogemos los datos más recientes (lleguen tarde o temprano)
+        cmd_vel_msg = self._latest_cmd_vel
+        pose_msg = self._latest_pose
+        # Comprobamos la pose
+        self._check_estimated_pose(pose_msg)
+        # Extraemos velocidades
+        v = cmd_vel_msg.twist.linear.x
+        w = cmd_vel_msg.twist.angular.z
+        # ¡LA CLAVE! Le decimos a CoppeliaSim que avance el tiempo SIEMPRE
+        self._robot.move(v, w)
+        self._coppeliasim.next_step()
+        z_scan, z_v, z_w = self._robot.sense()
+        # Comprobamos si hemos llegado
+        if self._check_goal():
+            self._sim_timer.cancel()  # Paramos el timer si hemos ganado
+            return
+        # Publicamos los sensores para que Localización/Control hagan su trabajo
+        self._publish_odometry(z_v, z_w)
+        self._publish_scan(z_scan)
 
     def _next_step_callback(self, cmd_vel_msg: TwistStamped, pose_msg: PoseStamped = PoseStamped()):
         """Subscriber callback. Executes a simulation step and publishes the new measurements.
@@ -298,6 +302,7 @@ class CoppeliaSimNode(LifecycleNode):
 import cProfile
 import pstats
 
+
 def main(args=None):
     profiler = cProfile.Profile()
     profiler.enable()
@@ -312,7 +317,7 @@ def main(args=None):
     coppeliasim_node.destroy_node()
     rclpy.try_shutdown()
     profiler.disable()
-    profiler.dump_stats('coppeliasim.prof')
+    profiler.dump_stats("coppeliasim.prof")
 
 
 if __name__ == "__main__":
