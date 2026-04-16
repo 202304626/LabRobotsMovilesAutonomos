@@ -6,6 +6,7 @@
 #include <vector>
 #include <limits>
 #include <algorithm>
+#include <numeric>
 
 namespace py = pybind11;
 
@@ -205,9 +206,85 @@ py::array_t<double> batch_raycasting(
     return result;
 }
 
+// RESAMPLE AND WEIGHT
+// 1. Calcula los pesos usando la campana de Gauss
+void compute_weights(
+    py::array_t<double> probabilities, 
+    py::array_t<double> z_real, 
+    py::array_t<double> all_z_hat, 
+    double sigma_z, 
+    double sensor_range_min) 
+{
+    auto p_out = probabilities.mutable_unchecked<1>();
+    auto z_r = z_real.unchecked<1>();
+    auto z_sim = all_z_hat.unchecked<2>(); // [Partículas][Rayos]
+    int num_particles = p_out.shape(0);
+    int num_rays = z_r.shape(0);
+    double denominator = sigma_z * std::sqrt(2.0 * M_PI);
+    double var_2 = 2.0 * sigma_z * sigma_z;
+    for (int i = 0; i < num_particles; ++i) {
+        double total_prob = 1.0;
+        for (int j = 0; j < num_rays; ++j) {
+            double real_val = std::isnan(z_r(j)) ? sensor_range_min : z_r(j);
+            double sim_val = std::isnan(z_sim(i, j)) ? sensor_range_min : z_sim(i, j);
+            
+            double diff = sim_val - real_val;
+            double prob = std::exp(-(diff * diff) / var_2) / denominator;
+            total_prob *= prob;
+        }
+        p_out(i) = total_prob;
+    }
+}
+// 2. Ruleta Rusa: Low Variance Resampling (Adaptado para Matriz Nx3)
+void resample_particles(
+    py::array_t<double> particles, 
+    py::array_t<double> probabilities) 
+{
+    auto part = particles.mutable_unchecked<2>(); // [Partículas][3 (x,y,theta)]
+    auto prob = probabilities.mutable_unchecked<1>();
+    int N = prob.shape(0);
+    // Normalizar probabilidades
+    double sum = 0.0;
+    for (int i = 0; i < N; ++i) sum += prob(i);
+    
+    if (sum > 0.0) {
+        for (int i = 0; i < N; ++i) prob(i) /= sum;
+    } else {
+        // Si la suma es 0 (robot perdido), repartimos pesos uniformes para no crashear
+        for (int i = 0; i < N; ++i) prob(i) = 1.0 / N;
+    }
+    // Arrays temporales para guardar las copias ganadoras
+    std::vector<double> new_x(N), new_y(N), new_th(N);
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_real_distribution<double> dis(0.0, 1.0 / N);
+    double r = dis(gen);
+    double c = prob(0);
+    int i = 0;
+    for (int m = 0; m < N; ++m) {
+        double U = r + (double)m / N;
+        while (U > c && i < N - 1) {
+            i++;
+            c += prob(i);
+        }
+        // Clona la x, y, theta de la partícula ganadora
+        new_x[m] = part(i, 0);
+        new_y[m] = part(i, 1);
+        new_th[m] = part(i, 2);
+    }
+    // Sobreescribir la matriz original de Python
+    for (int j = 0; j < N; ++j) {
+        part(j, 0) = new_x[j];
+        part(j, 1) = new_y[j];
+        part(j, 2) = new_th[j];
+    }
+}
+// --- PYBIND11 MODULE ---
 
 PYBIND11_MODULE(amr_localization_cpp, m) {
     m.def("init_map_segments", &init_map_segments, "Carga los segmentos del mapa en la memoria C++");
     m.def("move_and_collide_particles", &move_and_collide_particles, "Cinematica y colisiones fusionadas in-place");
     m.def("batch_raycasting", &batch_raycasting, "Raycasting masivo para todas las partículas");
+    m.def("compute_weights", &compute_weights, "Compute particle weights using Gaussian probability");
+    m.def("resample_particles", &resample_particles, "Perform low variance resampling on particles");
 }

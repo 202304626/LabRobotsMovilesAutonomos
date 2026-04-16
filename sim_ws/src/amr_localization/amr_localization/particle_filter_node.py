@@ -41,6 +41,7 @@ class ParticleFilterNode(LifecycleNode):
         self.declare_parameter("simulation", False)
         self.declare_parameter("steps_btw_sense_updates", 10)
         self.declare_parameter("world", "lab03")
+        self.declare_parameter("min_particles", 100)
 
     def on_configure(self, state: LifecycleState) -> TransitionCallbackReturn:
         """Handles a configuring transition.
@@ -81,10 +82,12 @@ class ParticleFilterNode(LifecycleNode):
             map_path = os.path.realpath(
                 os.path.join(os.path.dirname(__file__), "..", "maps", world + ".json")
             )
+            min_particles = self.get_parameter("min_particles").get_parameter_value().integer_value
             self._particle_filter = ParticleFilter(
                 dt,
                 map_path,
                 particle_count=particles,
+                min_particles=min_particles,
                 sigma_v=sigma_v,
                 sigma_w=sigma_w,
                 sigma_z=sigma_z,
@@ -189,11 +192,7 @@ class ParticleFilterNode(LifecycleNode):
             z_v: Odometric estimate of the linear velocity of the robot center [m/s].
             z_w: Odometric estimate of the angular velocity of the robot center [rad/s].
         """
-        start_time = time.perf_counter()
         self._particle_filter.move(z_v, z_w)
-        move_time = time.perf_counter() - start_time
-
-        # self.get_logger().info(f"Move step time: {move_time:7.3f} s")
 
         if self._enable_plot:
             self._particle_filter.show("Move", save_figure=True)
