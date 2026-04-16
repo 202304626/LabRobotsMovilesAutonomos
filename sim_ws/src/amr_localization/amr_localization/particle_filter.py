@@ -66,7 +66,7 @@ class ParticleFilter:
         self._simulation: bool = simulation
         self._iteration: int = 0
 
-        self._localized_particle_count: int = 25
+        self._localized_particle_count: int = 400
         self._localized = False
 
         #######################################
@@ -107,60 +107,83 @@ class ParticleFilter:
         )
 
     def compute_pose(self) -> tuple[bool, tuple[float, float, float]]:
-        """Computes the pose estimate with a fast-track for tracking mode."""
 
-        # Si ya estamos localizados, usamos la "vía rápida"
         if self._localized:
-            # 1. Calculamos la dispersión (Desviación estándar de las posiciones)
-            # Si el std es bajo, es que el grupo está unido y no necesitamos DBSCAN
             std_x = np.std(self._particles[:, 0])
             std_y = np.std(self._particles[:, 1])
-
-            # Umbral de seguridad: si las partículas se separan más de 30cm,
-            # es que nos hemos perdido y hay que volver a usar DBSCAN
-            if std_x < 0.3 and std_y < 0.3:
+            # ¡Importante! No re-inundamos el mapa, solo volvemos a usar DBSCAN
+            if std_x < 0.4 and std_y < 0.4:
                 x_mean = np.mean(self._particles[:, 0])
                 y_mean = np.mean(self._particles[:, 1])
                 theta_mean = math.atan2(
                     np.mean(np.sin(self._particles[:, 2])), np.mean(np.cos(self._particles[:, 2]))
                 ) % (2 * math.pi)
-
                 return True, (x_mean, y_mean, theta_mean)
             else:
-                # Nos hemos dispersado, perdemos el estado de "localizado"
                 self._localized = False
                 if self._logger:
-                    self._logger.warn("Pérdida de convergencia, re-activando DBSCAN")
+                    self._logger.warn(
+                        "Pérdida de convergencia, re-activando DBSCAN (Sin re-esparcir)"
+                    )
 
         # --- MODO LOCALIZACIÓN (DBSCAN) ---
-        # Solo llegamos aquí si self._localized es False
         particles_projected = np.array(self._particles, dtype=float)
         theta = particles_projected[:, -1]
         particles_projected = np.hstack(
             [particles_projected[:, :-1], np.cos(theta)[:, None], np.sin(theta)[:, None]]
         )
-
         clustering = DBSCAN(eps=0.2, min_samples=5).fit(particles_projected)
         labels = clustering.labels_
         n_clusters = len(set(labels) - {-1})
         indexes = clustering.core_sample_indices_
-
         if n_clusters == 1:
-            self._localized = True  # ¡Lo encontramos!
-            cluster_particles = np.asarray(self._particles[indexes], dtype=np.float64)
-
-            x_mean = np.mean(cluster_particles[:, 0])
-            y_mean = np.mean(cluster_particles[:, 1])
+            self._localized = True
+            cluster_particles = self._particles[indexes]
+            # Reducción SEGURA
+            if len(cluster_particles) > self._localized_particle_count:
+                indices_elegidos = np.random.choice(
+                    len(cluster_particles), self._localized_particle_count, replace=False
+                )
+                self._particles = np.ascontiguousarray(cluster_particles[indices_elegidos])
+            else:
+                self._particles = np.ascontiguousarray(cluster_particles)
+            self._particle_count = len(self._particles)
+            x_mean = np.mean(self._particles[:, 0])
+            y_mean = np.mean(self._particles[:, 1])
             theta_mean = math.atan2(
-                np.mean(np.sin(cluster_particles[:, -1])), np.mean(np.cos(cluster_particles[:, -1]))
+                np.mean(np.sin(self._particles[:, -1])), np.mean(np.cos(self._particles[:, -1]))
             ) % (2 * math.pi)
-
-            self._particle_count = self._localized_particle_count
             return True, (x_mean, y_mean, theta_mean)
-
         elif n_clusters > 1:
-            self._particle_count = max(int(100 * n_clusters), 100)
+            # 1. Decidir cuántas partículas queremos mantener en esta iteración.
+            # Por ejemplo, 100 por cada clúster, con un mínimo de 400 y un máximo de 3000.
+            target_count = min(
+                self._initial_particle_count,
+                max(int(100 * n_clusters), self._localized_particle_count),
+            )
 
+            # 2. Si el array actual es más grande que nuestro objetivo, lo reducimos físicamente.
+            if len(self._particles) > target_count:
+                # Extraemos todas las partículas que el DBSCAN consideró parte de algún clúster (labels != -1)
+                core_particles = self._particles[labels != -1]
+
+                if len(core_particles) > target_count:
+                    # Si hay demasiadas partículas "buenas", nos quedamos con una muestra aleatoria
+                    indices_elegidos = np.random.choice(
+                        len(core_particles), target_count, replace=False
+                    )
+                    self._particles = np.ascontiguousarray(core_particles[indices_elegidos])
+                elif len(core_particles) > 0:
+                    # Si hay menos partículas "buenas" que el target, nos quedamos con todas ellas
+                    self._particles = np.ascontiguousarray(core_particles)
+
+                # Actualizamos el contador oficial
+                self._particle_count = len(self._particles)
+
+                if self._logger:
+                    self._logger.info(
+                        f"Reduciendo partículas gradualmente: {n_clusters} clústeres -> {self._particle_count} partículas"
+                    )
         return False, (float("nan"), float("nan"), float("nan"))
 
     def move(self, v: float, w: float) -> None:
@@ -176,50 +199,22 @@ class ParticleFilter:
         )
 
     def resample(self, measurements: list[float]) -> None:
-        """Samples a new set of particles using Batch C++ Raycasting."""
+        """Samples a new set of particles using full C++ acceleration."""
         self._iteration += 1
         n = self._particles.shape[0]
-
-        # 1. Definimos los índices de los rayos que queremos usar
         ray_indices = list(range(0, 240, 240 // 8))
-
-        # 2. LANZAMIENTO MASIVO: C++ calcula los láseres de TODAS las partículas a la vez
-        # all_z_hat es una matriz (N_partículas, 8_rayos)
         all_z_hat = amr_localization_cpp.batch_raycasting(
             self._particles, ray_indices, 1.5, -0.035, self._sensor_range_max
         )
-
-        # 3. Vectorizamos el cálculo de probabilidad
-        z_real = np.array([measurements[i] for i in ray_indices])
-        z_real = np.where(np.isnan(z_real), self._sensor_range_min, z_real)
-
-        # Convertimos all_z_hat NaNs a sensor_range_min
-        all_z_hat = np.where(np.isnan(all_z_hat), self._sensor_range_min, all_z_hat)
-
-        # Calculamos la probabilidad gaussiana para todos a la vez (vectorizado con NumPy)
-        # Prob = exp(-0.5 * ((z_pred - z_obs) / sigma)^2)
-        diff = all_z_hat - z_real  # Diferencia entre lo que ve cada partícula y el robot real
-        exponent = -0.5 * (diff / self._sigma_z) ** 2
-        probs_per_ray = np.exp(exponent) / (self._sigma_z * np.sqrt(2 * np.pi))
-
-        # La probabilidad de la partícula es el producto de las probabilidades de sus rayos
-        probabilities = np.prod(probs_per_ray, axis=1)
-
-        # --- El resto del resample sigue igual ---
-        total = np.sum(probabilities)
-        if total > 0:
-            probabilities /= total
-        else:
-            probabilities = np.ones(n) / n
+        z_real = np.array([measurements[i] for i in ray_indices], dtype=np.float64)
+        probabilities = np.zeros(n, dtype=np.float64)
+        amr_localization_cpp.compute_weights(
+            probabilities, z_real, all_z_hat, self._sigma_z, self._sensor_range_min
+        )
+        if np.sum(probabilities) == 0:
             self._localized = False
 
-        n_new = self._particle_count
-
-        rand_numbers = np.random.uniform(0, 1 / n_new) + np.arange(n_new) / n_new
-        weight_circle = np.cumsum(probabilities)
-        prominent_weights = np.digitize(rand_numbers, weight_circle)
-        prominent_weights = np.clip(prominent_weights, 0, len(self._particles) - 1)
-        self._particles = self._particles[prominent_weights]
+        amr_localization_cpp.resample_particles(self._particles, probabilities)
 
     def plot(self, axes, orientation: bool = True):
         """Draws particles.

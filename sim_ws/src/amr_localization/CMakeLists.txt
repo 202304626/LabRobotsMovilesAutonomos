@@ -28,6 +28,7 @@ install(DIRECTORY maps images resource
 pybind11_add_module(amr_localization_cpp src/particle_filter_cpp.cpp)
 target_include_directories(amr_localization_cpp PRIVATE ${EIGEN3_INCLUDE_DIRS})
 target_compile_features(amr_localization_cpp PRIVATE cxx_std_17)
+target_compile_options(amr_localization_cpp PRIVATE -O3 -ffast-math)
 
 pybind11_add_module(maps_cpp src/maps_cpp.cpp)
 target_compile_features(maps_cpp PRIVATE cxx_std_17)

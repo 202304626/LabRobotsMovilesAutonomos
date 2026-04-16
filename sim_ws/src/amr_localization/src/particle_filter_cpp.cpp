@@ -205,9 +205,107 @@ py::array_t<double> batch_raycasting(
     return result;
 }
 
+void compute_weights(
+    py::array_t<double> probabilities, 
+    py::array_t<double> z_real, 
+    py::array_t<double> all_z_hat, 
+    double sigma_z, 
+    double sensor_range_min) 
+{
+    auto p_out = probabilities.mutable_unchecked<1>();
+    auto z_r = z_real.unchecked<1>();
+    auto z_sim = all_z_hat.unchecked<2>();
+    int num_particles = p_out.shape(0);
+    int num_rays = z_r.shape(0);
+    
+    double var_2 = 2.0 * sigma_z * sigma_z;
+    double log_denominator = std::log(sigma_z * std::sqrt(2.0 * M_PI));
+    double max_log_prob = -1e300; // Un número muy negativo
+    // 1. Calcular el logaritmo de la probabilidad para cada partícula
+    for (int i = 0; i < num_particles; ++i) {
+        double log_total_prob = 0.0;
+        for (int j = 0; j < num_rays; ++j) {
+            double real_val = std::isnan(z_r(j)) ? sensor_range_min : z_r(j);
+            double sim_val = std::isnan(z_sim(i, j)) ? sensor_range_min : z_sim(i, j);
+            double diff = sim_val - real_val;
+            
+            // Logaritmo de la gaussiana: ln( e^(-diff^2 / 2*sigma^2) / denom )
+            // = (-diff^2 / 2*sigma^2) - ln(denom)
+            double log_prob = -(diff * diff) / var_2 - log_denominator;
+            log_total_prob += log_prob;
+        }
+        p_out(i) = log_total_prob; // Guardamos temporalmente el logaritmo
+        
+        // Encontrar el logaritmo máximo para estabilizar el paso de exponenciación
+        if (log_total_prob > max_log_prob) {
+            max_log_prob = log_total_prob;
+        }
+    }
+    // 2. Aplicar el truco Log-Sum-Exp para evitar el underflow a cero.
+    // Restamos el logaritmo máximo antes de exponenciar. La suma total se estabiliza.
+    double sum_prob = 0.0;
+    for (int i = 0; i < num_particles; ++i) {
+        // Exponenciamos el valor estabilizado
+        p_out(i) = std::exp(p_out(i) - max_log_prob);
+        sum_prob += p_out(i);
+    }
+    
+    // 3. Normalizar para que la suma sea 1.0 (o si falló gravemente, asignar uniforme)
+    if (sum_prob > 0.0) {
+        for (int i = 0; i < num_particles; ++i) {
+            p_out(i) /= sum_prob;
+        }
+    } else {
+        // Fallback de seguridad (no debería ocurrir con el log-sum-exp)
+        for (int i = 0; i < num_particles; ++i) {
+            p_out(i) = 1.0 / num_particles;
+        }
+    }
+}
+// 2. Ruleta Rusa: Low Variance Resampling
+void resample_particles(
+    py::array_t<double> particles, 
+    py::array_t<double> probabilities) 
+{
+    auto part = particles.mutable_unchecked<2>(); 
+    auto prob = probabilities.mutable_unchecked<1>();
+    int N = prob.shape(0);
+    double sum = 0.0;
+    for (int i = 0; i < N; ++i) sum += prob(i);
+    
+    if (sum > 0.0) {
+        for (int i = 0; i < N; ++i) prob(i) /= sum;
+    } else {
+        for (int i = 0; i < N; ++i) prob(i) = 1.0 / N;
+    }
+    std::vector<double> new_x(N), new_y(N), new_th(N);
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_real_distribution<double> dis(0.0, 1.0 / N);
+    double r = dis(gen);
+    double c = prob(0);
+    int i = 0;
+    for (int m = 0; m < N; ++m) {
+        double U = r + (double)m / N;
+        while (U > c && i < N - 1) {
+            i++;
+            c += prob(i);
+        }
+        new_x[m] = part(i, 0);
+        new_y[m] = part(i, 1);
+        new_th[m] = part(i, 2);
+    }
+    for (int j = 0; j < N; ++j) {
+        part(j, 0) = new_x[j];
+        part(j, 1) = new_y[j];
+        part(j, 2) = new_th[j];
+    }
+}
 
 PYBIND11_MODULE(amr_localization_cpp, m) {
     m.def("init_map_segments", &init_map_segments, "Carga los segmentos del mapa en la memoria C++");
     m.def("move_and_collide_particles", &move_and_collide_particles, "Cinematica y colisiones fusionadas in-place");
     m.def("batch_raycasting", &batch_raycasting, "Raycasting masivo para todas las partículas");
+    m.def("compute_weights", &compute_weights, "Compute particle weights using Gaussian probability");
+    m.def("resample_particles", &resample_particles, "Perform low variance resampling on particles");
 }
