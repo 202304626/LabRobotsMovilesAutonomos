@@ -201,38 +201,27 @@ class ParticleFilter:
     def resample(self, measurements: list[float]) -> None:
         """Samples a new set of particles using full C++ acceleration."""
         # --- INICIO CRONÓMETRO GLOBAL ---
-        t_start_total = time.perf_counter()
+
         self._iteration += 1
         n = self._particles.shape[0]
         # 1. Definimos los índices
         ray_indices = list(range(0, 240, 240 // 8))
         # --- CRONÓMETRO RAYCASTING ---
-        t_start_ray = time.perf_counter()
+
         all_z_hat = amr_localization_cpp.batch_raycasting(
             self._particles, ray_indices, 1.5, -0.035, self._sensor_range_max
         )
-        t_end_ray = time.perf_counter()
+
         # Preparamos los arrays para pasar a C++
         z_real = np.array([measurements[i] for i in ray_indices], dtype=np.float64)
         probabilities = np.zeros(n, dtype=np.float64)
-        # --- CRONÓMETRO PESOS Y REMUESTREO ---
-        t_start_resample = time.perf_counter()
+
         amr_localization_cpp.compute_weights(
             probabilities, z_real, all_z_hat, self._sigma_z, self._sensor_range_min
         )
         if np.sum(probabilities) == 0:
             self._localized = False
         amr_localization_cpp.resample_particles(self._particles, probabilities)
-        t_end_resample = time.perf_counter()
-
-        t_end_total = time.perf_counter()
-        # --- IMPRIMIR RESULTADOS EN CONSOLA ---
-        if self._logger:
-            self._logger.warning(
-                f"Tiempos C++ | Raycasting: {(t_end_ray - t_start_ray) * 1000:.2f}ms | "
-                f"Pesos+Ruleta: {(t_end_resample - t_start_resample) * 1000:.2f}ms | "
-                f"Total Resample: {(t_end_total - t_start_total) * 1000:.2f}ms"
-            )
 
     def plot(self, axes, orientation: bool = True):
         """Draws particles.
