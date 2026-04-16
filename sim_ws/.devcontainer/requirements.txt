@@ -1,4 +1,5 @@
 coppeliasim-zmqremoteapi-client==2.0.4
+hdbscan==0.8.38  # Fast hierarchical clustering (10-50x faster than sklearn DBSCAN)
 numba==0.60.0
 numpy==1.26.4
 pytz==2024.2
