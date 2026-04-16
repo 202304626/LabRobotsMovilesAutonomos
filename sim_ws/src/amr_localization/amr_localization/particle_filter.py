@@ -125,6 +125,8 @@ class ParticleFilter:
                     self._logger.warn(
                         "Pérdida de convergencia, re-activando DBSCAN (Sin re-esparcir)"
                     )
+        if not self._localized and self._iteration % 5 != 0:
+            return False, (float("nan"), float("nan"), float("nan"))
 
         # --- MODO LOCALIZACIÓN (DBSCAN) ---
         particles_projected = np.array(self._particles, dtype=float)
@@ -132,7 +134,9 @@ class ParticleFilter:
         particles_projected = np.hstack(
             [particles_projected[:, :-1], np.cos(theta)[:, None], np.sin(theta)[:, None]]
         )
-        clustering = DBSCAN(eps=0.2, min_samples=5).fit(particles_projected)
+        clustering = DBSCAN(eps=0.2, min_samples=30, n_jobs=-1, algorithm="kd_tree").fit(
+            particles_projected
+        )
         labels = clustering.labels_
         n_clusters = len(set(labels) - {-1})
         indexes = clustering.core_sample_indices_
