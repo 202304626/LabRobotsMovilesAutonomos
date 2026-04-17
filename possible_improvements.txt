@@ -7,3 +7,10 @@ llevarse la creacion del grafo al on_activate a una funcion externa (no el on_co
 problemas en el resample, en el sense, en el nº inicial de partículas ¿? igual hay que empezar con mas partículas solo para la primera iteracion (evitar privacion de partículas) pero ya a partir de la segunda iteracion, reducir el nº de particulas drasticamente
 
 usar unos params de ruido para cuando nos estamos localizando, y una vez localizados, usar un ruido menor (cambiar las sigmas, teniendo 6 sigmas en vez de solo 3)
+
+------
+
+En físico:
+
+hemos probado a engrosar más los obstáculos, le hemos metido 0.15 cuando antes estaba en 0.12
+

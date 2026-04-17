@@ -135,7 +135,7 @@ class ParticleFilter:
             self._particle_count = self._localized_particle_count
 
         elif n_clusters > 1:
-            self._particle_count = max(int(100 * n_clusters), 100)
+            self._particle_count = int(100 * n_clusters)
 
         return localized, pose
 

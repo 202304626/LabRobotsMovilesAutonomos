@@ -1,0 +1,759 @@
+# PARTICLE FILTER - DIAGRAMAS DE FLUJO VISUAL
+
+## 1. DIAGRAMA JERÁRQUICO: LLAMADAS DE FUNCIÓN
+
+```
+╔════════════════════════════════════════════════════════════════════════════╗
+║                                                                            ║
+║                   ROS 2 LIFECYCLE & INITIALIZATION                        ║
+║                                                                            ║
+║  main()                                                                    ║
+║   └─ rclpy.init()                                                          ║
+║   └─ ParticleFilterNode()  [__init__]                                     ║
+║      ├─ declare_parameter('dt')                                           ║
+║      ├─ declare_parameter('particles')                                    ║
+║      ├─ declare_parameter('sigma_v', 'sigma_w', 'sigma_z')                ║
+║      └─ ... (12 parámetros más)                                           ║
+║                                                                            ║
+║   └─ rclpy.spin(particle_filter_node)                                     ║
+║      └─ Espera a transiciones de lifecycle ...                            ║
+║                                                                            ║
+║   └─ [TRANSITION: unconfigured → inactive]                               ║
+║      └─ on_configure()                                                    ║
+║         ├─ get_parameters_from_server()                                   ║
+║         ├─ ParticleFilter.__init__(...)  ◄─── CREA LA INSTANCIA          ║
+║         │  ├─ Map.__init__(map_path)                                      ║
+║         │  ├─ _init_particles(N=1000)  ◄─── BUCLE 1: 1000 partículas     ║
+║         │  │  ├─ FOR particle in range(N):                                ║
+║         │  │  │  ├─ random point in [x_min, x_max], [y_min, y_max]       ║
+║         │  │  │  ├─ map.contains(x, y)  ← Verifica si está libre         ║
+║         │  │  │  └─ [IF no libre]: retry                                  ║
+║         │  │  └─ RETURN particles array (1000, 3)                         ║
+║         │  ├─ plt.subplots(...)  ← Configuración de visualización         ║
+║         │  └─ datetime.now()  ← Timestamp de inicio                       ║
+║         │                                                                  ║
+║         ├─ self.pose_publisher = create_publisher()                       ║
+║         ├─ self.odom_subscriber = create_subscription()                   ║
+║         ├─ self.scan_subscriber = create_subscription()                   ║
+║         └─ ApproximateTimeSynchronizer([odom, scan])                      ║
+║            └─ .registerCallback(_compute_pose_callback)  ◄─── REGISTRA   ║
+║                                                                            ║
+║   └─ [TRANSITION: inactive → active]                                     ║
+║      └─ on_activate()  ← Node comienza a procesar mensajes               ║
+║                                                                            ║
+╚════════════════════════════════════════════════════════════════════════════╝
+```
+
+---
+
+## 2. DIAGRAMA DE FLUJO: CALLBACK PRINCIPAL
+
+```
+╔════════════════════════════════════════════════════════════════════════════╗
+║                                                                            ║
+║           EVENTO DISPARADOR: /odometry + /scan llegan sincronizados       ║
+║                                                                            ║
+║  ApproximateTimeSynchronizer.registerCallback()                           ║
+║   └─ _compute_pose_callback(odom_msg, scan_msg)                          ║
+║                                                                            ║
+║      ┌──────────────────────────────────────────────────────────────────┐ ║
+║      │ EXTRACCIÓN DE DATOS                                              │ ║
+║      ├──────────────────────────────────────────────────────────────────┤ ║
+║      │                                                                  │ ║
+║      │ z_v  ← odom_msg.twist.twist.linear.x        [m/s]               │ ║
+║      │ z_w  ← odom_msg.twist.twist.angular.z       [rad/s]             │ ║
+║      │ z_scan ← list(scan_msg.ranges)              [240 valores]        │ ║
+║      │                                                                  │ ║
+║      └──────────────────────────────────────────────────────────────────┘ ║
+║                                                                            ║
+║      ▼                                                                     ║
+║      ┌──────────────────────────────────────────────────────────────────┐ ║
+║      │ PASO 1: MOTION UPDATE (SIEMPRE)                                  │ ║
+║      ├──────────────────────────────────────────────────────────────────┤ ║
+║      │                                                                  │ ║
+║      │ _execute_motion_step(z_v, z_w)                                   │ ║
+║      │   │                                                               │ ║
+║      │   └─ ParticleFilter.move(z_v, z_w)  ◄─── PREDICCIÓN             │ ║
+║      │      │                                                            │ ║
+║      │      ├─ self._iteration += 1                                      │ ║
+║      │      │                                                            │ ║
+║      │      └─ ┌─────────────────────────────────────────────────────┐ │ ║
+║      │         │ BUCLE 1: FOR i IN range(1000):  ← CADA PARTÍCULA   │ │ ║
+║      │         │                                                     │ │ ║
+║      │         │  particle = self._particles[i]                     │ │ ║
+║      │         │  (x, y, θ) = particle[0], particle[1], particle[2]│ │ ║
+║      │         │                                                     │ │ ║
+║      │         │  ┌─ NOISE GENERATION                              │ │ ║
+║      │         │  │ noise_v ~ N(0, σ_v)                            │ │ ║
+║      │         │  │ noise_w ~ N(0, σ_w)                            │ │ ║
+║      │         │  └─                                                │ │ ║
+║      │         │                                                     │ │ ║
+║      │         │  ┌─ KINEMATICS UPDATE                             │ │ ║
+║      │         │  │ x_vel = cos(θ) * (z_v + noise_v)              │ │ ║
+║      │         │  │ y_vel = sin(θ) * (z_v + noise_v)              │ │ ║
+║      │         │  │ Δx = x_vel * dt                                │ │ ║
+║      │         │  │ Δy = y_vel * dt                                │ │ ║
+║      │         │  │ Δθ = (z_w + noise_w) * dt                      │ │ ║
+║      │         │  │                                                 │ │ ║
+║      │         │  │ particle[0] += Δx                              │ │ ║
+║      │         │  │ particle[1] += Δy                              │ │ ║
+║      │         │  │ particle[2] = (particle[2] + Δθ) % 2π          │ │ ║
+║      │         │  └─                                                │ │ ║
+║      │         │                                                     │ │ ║
+║      │         │  ┌─ COLLISION CHECK                               │ │ ║
+║      │         │  │ segment = [(x_old, y_old), (x_new, y_new)]    │ │ ║
+║      │         │  │ collision = self._map.check_collision(segment)│ │ ║
+║      │         │  │ [IF collision]:                                │ │ ║
+║      │         │  │   particle[0:2] = collision_point             │ │ ║
+║      │         │  └─                                                │ │ ║
+║      │         │                                                     │ │ ║
+║      │         └─────────────────────────────────────────────────────┘ │ ║
+║      │                                                                  │ ║
+║      │      RESULTADO: 1000 partículas actualizadas                      │ ║
+║      │                                                                  │ ║
+║      └──────────────────────────────────────────────────────────────────┘ ║
+║                                                                            ║
+║      ▼                                                                     ║
+║      ┌──────────────────────────────────────────────────────────────────┐ ║
+║      │ PASO 2: MEASUREMENT UPDATE (CADA 10 ITERACIONES)                 │ ║
+║      ├──────────────────────────────────────────────────────────────────┤ ║
+║      │                                                                  │ ║
+║      │ [IF (self._steps % 10 == 0) OR self._localized]:                │ ║
+║      │                                                                  │ ║
+║      │   _execute_measurement_step(z_scan)                              │ ║
+║      │     │                                                            │ ║
+║      │     └─ ParticleFilter.resample(z_scan)  ◄─── ACTUALIZACIÓN      │ ║
+║      │        │                                                         │ ║
+║      │        ├─ probabilities = np.zeros(1000)                         │ ║
+║      │        │                                                         │ ║
+║      │        └─ ┌──────────────────────────────────────────────────┐  │ ║
+║      │           │ BUCLE 2: FOR i IN range(1000):  ← CADA PARTÍCULA │ ║
+║      │           │                                                  │  │ ║
+║      │           │  particle = self._particles[i]                  │  │ ║
+║      │           │                                                  │  │ ║
+║      │           │  probabilities[i] = _measurement_probability()  │  │ ║
+║      │           │    │                                            │  │ ║
+║      │           │    └─ ┌─────────────────────────────────────┐  │  │ ║
+║      │           │       │ PASO A: OBTENER PREDICCIÓN          │  │  │ ║
+║      │           │       │                                      │  │  │ ║
+║      │           │       │ z_hat = _sense(particle_pose)       │  │  │ ║
+║      │           │       │   │                                 │  │  │ ║
+║      │           │       │   └─ rays = [0, 30, 60, 90, ...]   │  │  │ ║
+║      │           │       │   │                                 │  │  │ ║
+║      │           │       │   └─ segments = _lidar_rays(pose)   │  │  │ ║
+║      │           │       │      │                              │  │  │ ║
+║      │           │       │      └─ ┌────────────────────────┐  │  │  │ ║
+║      │           │       │         │ BUCLE 3: FOR j IN 0..7 │  │  │  │ ║
+║      │           │       │         │ (8 RAYOS)              │  │  │  │ ║
+║      │           │       │         │                        │  │  │  │ ║
+║      │           │       │         │ ray_angle = 1.5 * j°   │  │  │  │ ║
+║      │           │       │         │ project ray to max     │  │  │  │ ║
+║      │           │       │         │ segment.append(ray)    │  │  │  │ ║
+║      │           │       │         │                        │  │  │  │ ║
+║      │           │       │         └────────────────────────┘  │  │  │ ║
+║      │           │       │                                      │  │  │ ║
+║      │           │       │   FOR j IN range(8):                │  │  │ ║
+║      │           │       │     dist = map.check_collision(ray) │  │  │ ║
+║      │           │       │     z_hat[j] = dist                 │  │  │ ║
+║      │           │       │                                      │  │  │ ║
+║      │           │       │   RETURN z_hat (8 distancias)       │  │  │ ║
+║      │           │       │                                      │  │  │ ║
+║      │           │       └─────────────────────────────────────┘  │  │ ║
+║      │           │                                                  │  │ ║
+║      │           │   ┌─────────────────────────────────────┐        │  │ ║
+║      │           │   │ PASO B: EVALUAR PROBABILIDAD        │        │  │ ║
+║      │           │   │                                      │        │  │ ║
+║      │           │   │ rays = range(0, 240, 30)            │        │  │ ║
+║      │           │   │ subsampled_z = [z_scan[i] for i]   │        │  │ ║
+║      │           │   │                                      │        │  │ ║
+║      │           │   │ probability = 1.0                   │        │  │ ║
+║      │           │   │ FOR j IN range(8):                  │        │  │ ║
+║      │           │   │   gaussian_j = _gaussian(           │        │  │ ║
+║      │           │   │     mu = subsampled_z[j],           │        │  │ ║
+║      │           │   │     sigma = sigma_z,                │        │  │ ║
+║      │           │   │     x = z_hat[j]                    │        │  │ ║
+║      │           │   │   )                                 │        │  │ ║
+║      │           │   │   probability *= gaussian_j         │        │  │ ║
+║      │           │   │                                      │        │  │ ║
+║      │           │   │ RETURN probability                   │        │  │ ║
+║      │           │   │                                      │        │  │ ║
+║      │           │   └─────────────────────────────────────┘        │  │ ║
+║      │           │                                                  │  │ ║
+║      │           └──────────────────────────────────────────────────┘  │ ║
+║      │                                                                  │ ║
+║      │        ├─ ┌──────────────────────────────────────────────────┐  │ ║
+║      │        │  │ RESAMPLING (STRATIFIED SAMPLING)                │  │ ║
+║      │        │  │                                                  │  │ ║
+║      │        │  │ total = sum(probabilities)                      │  │ ║
+║      │        │  │ probabilities /= total  ← Normalize             │  │ ║
+║      │        │  │                                                  │  │ ║
+║      │        │  │ u = uniform(0, 1/N)                             │  │ ║
+║      │        │  │ u_samples = [u + i/N for i in range(N)]        │  │ ║
+║      │        │  │                                                  │  │ ║
+║      │        │  │ weight_circle = cumsum(probabilities)           │  │ ║
+║      │        │  │ indices = digitize(u_samples, weight_circle)    │  │ ║
+║      │        │  │ indices = clip(indices, 0, N-1)                 │  │ ║
+║      │        │  │                                                  │  │ ║
+║      │        │  │ self._particles = self._particles[indices]      │  │ ║
+║      │        │  │ ← Replicate high-prob, eliminate low-prob      │  │ ║
+║      │        │  │                                                  │  │ ║
+║      │        │  └──────────────────────────────────────────────────┘  │ ║
+║      │        │                                                         │ ║
+║      │        └─ compute_pose()  ◄─── ESTIMACIÓN                       │ ║
+║      │           │                                                     │ ║
+║      │           ├─ ┌──────────────────────────────────────────────┐  │ ║
+║      │           │  │ BUCLE 4: PROJECT PARTICLES TO 5D              │  │ ║
+║      │           │  │                                               │  │ ║
+║      │           │  │ FOR i IN range(1000):                        │  │ ║
+║      │           │  │   particles_5d[i, 0] = x                    │  │ ║
+║      │           │  │   particles_5d[i, 1] = y                    │  │ ║
+║      │           │  │   particles_5d[i, 2] = cos(theta)           │  │ ║
+║      │           │  │   particles_5d[i, 3] = sin(theta)           │  │ ║
+║      │           │  │   particles_5d[i, 4] = theta  [for mean]    │  │ ║
+║      │           │  │                                               │  │ ║
+║      │           │  └──────────────────────────────────────────────┘  │ ║
+║      │           │                                                     │ ║
+║      │           ├─ clustering = DBSCAN(eps=0.2, min_samples=5)       │ ║
+║      │           ├─ clustering.fit(particles_5d[:, :4])               │ ║
+║      │           │                                                     │ ║
+║      │           ├─ [IF n_clusters == 1]:  ◄─── LOCALIZED!            │ ║
+║      │           │  ├─ localized = True                               │ ║
+║      │           │  ├─ cluster_mean:                                  │ ║
+║      │           │  │  x_mean = mean(cluster_particles[:, 0])        │ ║
+║      │           │  │  y_mean = mean(cluster_particles[:, 1])        │ ║
+║      │           │  │  theta_mean = atan2(mean(sin(θ)), mean(cos(θ)))│ ║
+║      │           │  ├─ pose = (x_mean, y_mean, theta_mean)           │ ║
+║      │           │  └─ self._particle_count = 25  ← REDUCE            │ ║
+║      │           │                                                     │ ║
+║      │           ├─ [ELIF n_clusters > 1]:  ◄─── EXPLORING            │ ║
+║      │           │  ├─ localized = False                              │ ║
+║      │           │  └─ self._particle_count = max(100*n_clusters, 100)│ ║
+║      │           │                                                     │ ║
+║      │           └─ RETURN (localized, pose)                          │ ║
+║      │                                                                  │ ║
+║      └──────────────────────────────────────────────────────────────────┘ ║
+║                                                                            ║
+║      ▼                                                                     ║
+║      ┌──────────────────────────────────────────────────────────────────┐ ║
+║      │ PASO 3: PUBLICAR ESTIMACIÓN                                      │ ║
+║      ├──────────────────────────────────────────────────────────────────┤ ║
+║      │                                                                  │ ║
+║      │ _publish_pose_estimate(x_h, y_h, theta_h)                       │ ║
+║      │   │                                                              │ ║
+║      │   ├─ msg = PoseStamped()                                         │ ║
+║      │   ├─ msg.header.stamp = self.get_clock().now()                  │ ║
+║      │   ├─ msg.header.frame_id = "map"                                │ ║
+║      │   │                                                              │ ║
+║      │   ├─ [IF self._localized]:                                       │ ║
+║      │   │  ├─ msg.pose.position.x = x_h                               │ ║
+║      │   │  ├─ msg.pose.position.y = y_h                               │ ║
+║      │   │  ├─ (qx, qy, qz, qw) = euler2quat(roll=0, pitch=0, yaw=θ)  │ ║
+║      │   │  ├─ msg.pose.orientation.x/y/z/w = q*                      │ ║
+║      │   │  └─                                                          │ ║
+║      │   │                                                              │ ║
+║      │   ├─ msg.localized = self._localized                             │ ║
+║      │   └─ pose_publisher.publish(msg)  ◄─── /pose topic             │ ║
+║      │                                                                  │ ║
+║      └──────────────────────────────────────────────────────────────────┘ ║
+║                                                                            ║
+║      ▼                                                                     ║
+║      self._steps += 1                                                     ║
+║      [FIN Callback]                                                       ║
+║                                                                            ║
+╚════════════════════════════════════════════════════════════════════════════╝
+```
+
+---
+
+## 3. REPRESENTACIÓN VISUAL: BUCLES ANIDADOS
+
+```
+╔════════════════════════════════════════════════════════════════════════════╗
+║                        ESTRUCTURA DE BUCLES ANIDADOS                      ║
+╠════════════════════════════════════════════════════════════════════════════╣
+║                                                                            ║
+║  _compute_pose_callback()                                                 ║
+║  │                                                                         ║
+║  ├─ _execute_motion_step()                                                ║
+║  │  │                                                                      ║
+║  │  └─ move()                                                              ║
+║  │     │                                                                   ║
+║  │     └─ ╔═══════════════════════════════════════════════════════════╗  ║
+║  │        ║ BUCLE 1: for particle in self._particles (1000)          ║  ║
+║  │        ╠═══════════════════════════════════════════════════════════╣  ║
+║  │        ║                                                           ║  ║
+║  │        ║  • Generar ruido                                          ║  ║
+║  │        ║  • Actualizar (x, y, θ)                                   ║  ║
+║  │        ║  • Verificar colisión                                     ║  ║
+║  │        ║                                                           ║  ║
+║  │        ║  Iteraciones: 1000                                        ║  ║
+║  │        ║  Tiempo: ~15 ms                                           ║  ║
+║  │        ║                                                           ║  ║
+║  │        ╚═══════════════════════════════════════════════════════════╝  ║
+║  │                                                                         ║
+║  └─ _execute_measurement_step()  [CADA 10 CICLOS]                        ║
+║     │                                                                      ║
+║     └─ resample()                                                          ║
+║        │                                                                   ║
+║        ├─ ╔═══════════════════════════════════════════════════════════╗  ║
+║        │  ║ BUCLE 2: for particle in self._particles (1000)          ║  ║
+║        │  ╠═══════════════════════════════════════════════════════════╣  ║
+║        │  ║                                                           ║  ║
+║        │  ║  _measurement_probability()                              ║  ║
+║        │  ║  │                                                        ║  ║
+║        │  ║  ├─ _sense()                                              ║  ║
+║        │  ║  │  │                                                     ║  ║
+║        │  ║  │  └─ _lidar_rays()                                      ║  ║
+║        │  ║  │     │                                                  ║  ║
+║        │  ║  │     └─ ╔═════════════════════════════════════╗        ║  ║
+║        │  ║  │        ║ BUCLE 3: for ray in [0..7]         ║        ║  ║
+║        │  ║  │        ║ (8 RAYOS)                           ║        ║  ║
+║        │  ║  │        ╠═════════════════════════════════════╣        ║  ║
+║        │  ║  │        ║                                     ║        ║  ║
+║        │  ║  │        ║  • Proyectar rayo                  ║        ║  ║
+║        │  ║  │        ║  • Devolver segmento               ║        ║  ║
+║        │  ║  │        ║                                     ║        ║  ║
+║        │  ║  │        ║  Iteraciones: 8                     ║        ║  ║
+║        │  ║  │        ║                                     ║        ║  ║
+║        │  ║  │        ╚═════════════════════════════════════╝        ║  ║
+║        │  ║  │                                                        ║  ║
+║        │  ║  ├─ [Para cada rayo]:                                     ║  ║
+║        │  ║  │  └─ map.check_collision(rayo)  ← distancia            ║  ║
+║        │  ║  │                                                        ║  ║
+║        │  ║  ├─ ┌────────────────────────────────────────┐           ║  ║
+║        │  ║  │  │ BUCLE 3b: for measurement in 8 samples│           ║  ║
+║        │  ║  │  ├────────────────────────────────────────┤           ║  ║
+║        │  ║  │  │                                        │           ║  ║
+║        │  ║  │  │  • probability *= gaussian(...)        │           ║  ║
+║        │  ║  │  │                                        │           ║  ║
+║        │  ║  │  │  Iteraciones: 8                        │           ║  ║
+║        │  ║  │  │                                        │           ║  ║
+║        │  ║  │  └────────────────────────────────────────┘           ║  ║
+║        │  ║  │                                                        ║  ║
+║        │  ║  └─ RETURN probability                                    ║  ║
+║        │  ║                                                           ║  ║
+║        │  ║  Iteraciones internas: 8 * 8 = 64 gaussianas             ║  ║
+║        │  ║  Total para todas: 1000 * 64 = 64000 gaussianas          ║  ║
+║        │  ║  Tiempo: ~400 ms                                          ║  ║
+║        │  ║                                                           ║  ║
+║        │  ╚═══════════════════════════════════════════════════════════╝  ║
+║        │                                                                   ║
+║        ├─ Normalización (O(N))                                            ║
+║        ├─ Resampling (O(N log N))                                         ║
+║        │                                                                   ║
+║        └─ compute_pose()                                                  ║
+║           │                                                               ║
+║           ├─ ╔═══════════════════════════════════════════════════════╗   ║
+║           │  ║ BUCLE 4: for particle in self._particles (1000)      ║   ║
+║           │  ╠═══════════════════════════════════════════════════════╣   ║
+║           │  ║                                                       ║   ║
+║           │  ║  • Proyectar a 5D                                     ║   ║
+║           │  ║                                                       ║   ║
+║           │  ║  Iteraciones: 1000                                    ║   ║
+║           │  ║                                                       ║   ║
+║           │  ╚═══════════════════════════════════════════════════════╝   ║
+║           │                                                               ║
+║           ├─ DBSCAN.fit(particles_5d[:, :4])  ← Clustering              ║
+║           │                                                               ║
+║           └─ Extraer cluster mean  ← Pose estimada                      ║
+║                                                                            ║
+╚════════════════════════════════════════════════════════════════════════════╝
+```
+
+---
+
+## 4. GRÁFICO DE TIEMPO DE EJECUCIÓN
+
+```
+╔════════════════════════════════════════════════════════════════════════════╗
+║                      TIMELINE: CICLO COMPLETO (100ms)                    ║
+╚════════════════════════════════════════════════════════════════════════════╝
+
+CICLO 1 (sin measurement):
+  t=0ms    ┌─ _compute_pose_callback()
+  t=0-15ms │  ├─ move()           [BUCLE 1: 1000 partículas]
+  t=15-20ms│  └─ FIN (sin resample)
+  t=20ms   └─ publish /pose (última estimación)
+           
+CICLO 2-9 (sin measurement):
+  t=20ms   ┌─ _compute_pose_callback()
+  t=20-35ms│  ├─ move()
+  t=35-40ms│  └─ FIN
+  t=40ms   └─ publish /pose
+           
+CICLO 10 (CON MEASUREMENT):
+  t=200ms  ┌─ _compute_pose_callback()
+  t=200-215ms│  ├─ move()              [BUCLE 1: 1000 iteraciones] ─┐
+  t=215-615ms│  │                                                   ├─ 400ms
+  t=215-615ms│  ├─ resample()          [BUCLE 2-4: 1000*8*8]       ┤
+  t=615-715ms│  │  ├─ _measurement_probability x1000             ┤
+  t=715-815ms│  │  ├─ Normalización + Resampling                ┤
+  t=815-915ms│  │  └─ compute_pose() + DBSCAN                    ┤
+  t=915-920ms│  └─ publish /pose (estimación nueva)              └─
+  t=920ms   └─ FIN
+
+                 
+PATRÓN:
+│       │       │       │       │       │       │       │       │       │
+├─ 1 ──┤─ 2 ──┤─ 3 ──┤─ 4 ──┤─ 5 ──┤─ 6 ──┤─ 7 ──┤─ 8 ──┤─ 9 ──┤─ 10 ─┤
+│ 20ms │ 20ms │ 20ms │ 20ms │ 20ms │ 20ms │ 20ms │ 20ms │ 20ms │720ms │
+│ PF   │ PF   │ PF   │ PF   │ PF   │ PF   │ PF   │ PF   │ PF   │ PF+M │
+│      │      │      │      │      │      │      │      │      │      │
+└──────┴──────┴──────┴──────┴──────┴──────┴──────┴──────┴──────┴──────┘
+ Fast  Fast  Fast  Fast  Fast  Fast  Fast  Fast  Fast    SLOW!
+ only  only  only  only  only  only  only  only  only  (measurement)
+
+Donde:
+  PF = Prediction (move)
+  M  = Measurement (resample + compute_pose)
+```
+
+---
+
+## 5. FLUJO: DENTRO DE _measurement_probability()
+
+```
+╔════════════════════════════════════════════════════════════════════════════╗
+║       FUNCIÓN: _measurement_probability(z_scan, particle)                 ║
+║       LLAMADA DESDE: resample() [1000 veces]                              ║
+║       TIEMPO POR LLAMADA: ~0.4ms                                           ║
+╚════════════════════════════════════════════════════════════════════════════╝
+
+Entrada:
+  z_scan = [240 medidas LiDAR]  ← Distancias desde sensor
+  particle = (x, y, θ)           ← Posición de partícula
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ PASO 1: GET PREDICTED MEASUREMENTS                                      │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│  z_hat = _sense(particle)                                              │
+│    ↓                                                                    │
+│  _lidar_rays(particle, [0, 30, 60, 90, 120, 150, 180, 210])           │
+│    ↓                                                                    │
+│  FOR j IN 0..7:                    ← BUCLE INTERNO                    │
+│    ray_angle = 1.5 * j degrees                                        │
+│    ray = [(particle_x, particle_y), (end_x, end_y)]                  │
+│    rays.append(ray)                                                   │
+│    ↓                                                                    │
+│  RETURN rays  [8 segmentos]                                            │
+│    ↓                                                                    │
+│  FOR j IN 0..7:                    ← SEGUNDO BUCLE INTERNO            │
+│    distance = map.check_collision(rays[j])  ← LOS OCHO               │
+│    z_hat[j] = distance                                                │
+│    ↓                                                                    │
+│  RETURN z_hat  [8 distancias predichas]                               │
+│                                                                         │
+│  Ejemplo:                                                              │
+│  z_hat = [1.2, 0.8, 1.5, 2.1, 0.9, 1.3, 1.1, 0.7]                   │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ PASO 2: EXTRACT MEASURED SAMPLES                                        │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│  rays_indices = [0, 30, 60, 90, 120, 150, 180, 210]                  │
+│  ↓                                                                      │
+│  z_measured = []                                                       │
+│  FOR i IN 0..7:                    ← TERCER BUCLE INTERNO             │
+│    idx = rays_indices[i]                                              │
+│    measurement = z_scan[idx]                                          │
+│    [IF isnan(measurement)]:                                           │
+│      measurement = sensor_range_min                                   │
+│    z_measured[i] = measurement                                        │
+│    ↓                                                                    │
+│  RETURN z_measured  [8 medidas reales]                                │
+│                                                                         │
+│  Ejemplo:                                                              │
+│  z_measured = [1.25, 0.75, 1.48, 2.15, 0.95, 1.28, 1.05, 0.68]      │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ PASO 3: COMPUTE PROBABILITY                                             │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│  probability = 1.0                                                     │
+│  ↓                                                                      │
+│  FOR j IN 0..7:                    ← CUARTO BUCLE INTERNO             │
+│                                                                         │
+│    gaussian_j = _gaussian(                                            │
+│      mu = z_measured[j],      ← Medida observada                      │
+│      sigma = sigma_z,         ← 0.1 (parámetro)                       │
+│      x = z_hat[j]            ← Predicción                             │
+│    )                                                                   │
+│    ↓                                                                    │
+│    gaussian_j = exp(-0.5*((z_hat[j] - z_measured[j])/sigma_z)²)      │
+│                 / (sigma_z * sqrt(2π))                                │
+│    ↓                                                                    │
+│    [Ejemplo j=0]:                                                      │
+│    gaussian_0 = exp(-0.5*((1.2 - 1.25)/0.1)²) / (0.1 * 2.507)       │
+│               = exp(-0.5*(0.5)²) / 0.2507                             │
+│               = exp(-0.125) / 0.2507                                  │
+│               = 0.8825 / 0.2507                                       │
+│               ≈ 3.52                                                  │
+│    ↓                                                                    │
+│    probability *= gaussian_j                                          │
+│    ↓                                                                    │
+│  [j=0]: probability = 1.0 * 3.52 = 3.52                              │
+│  [j=1]: probability = 3.52 * 4.81 ≈ 16.93                            │
+│  [j=2]: probability = 16.93 * 3.24 ≈ 54.86                           │
+│  ...                                                                   │
+│  [j=7]: probability ≈ 2.14e-8                                         │
+│                                                                         │
+│  RETURN probability  [valor entre 0 y 1]                              │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+
+RESUMEN PARA ESTA PARTÍCULA:
+  • 8 rayos proyectados
+  • 8 distancias predichas
+  • 8 medidas reales extraídas
+  • 8 gaussianas evaluadas
+  • 1 probabilidad final = producto de las 8 gaussianas
+  
+TIEMPO TOTAL: ~0.4ms
+OPERACIONES: 8 + 8 + 8 + 8 = 32 operaciones por partícula
+PARA 1000 PARTÍCULAS: 32000 operaciones en ~400ms
+```
+
+---
+
+## 6. EJEMPLO CONCRETO: CICLO COMPLETO DE UNA PARTÍCULA
+
+```
+═══════════════════════════════════════════════════════════════════════════
+
+PARTÍCULA #500:
+
+Estado Inicial:
+  x = 2.5 m
+  y = 3.1 m
+  θ = 0.785 rad (45°)
+
+ENTRADA SENSORES:
+  v = 0.3 m/s     (velocidad lineal medida)
+  w = 0.1 rad/s   (velocidad angular medida)
+  z_scan = [1.25, 0.75, ..., 0.68]  (240 medidas LiDAR)
+
+═══════════════════════════════════════════════════════════════════════════
+
+PASO 1: MOTION UPDATE (move)
+  ──────────────────────────
+
+  1. Generar ruido:
+     noise_v ~ N(0, 0.05) = +0.01 m/s
+     noise_w ~ N(0, 0.15) = -0.02 rad/s
+
+  2. Calcular velocidades:
+     x_vel = cos(0.785) * (0.3 + 0.01) = 0.707 * 0.31 = 0.219
+     y_vel = sin(0.785) * (0.3 + 0.01) = 0.707 * 0.31 = 0.219
+
+  3. Actualizar posición (dt = 0.05s):
+     Δx = 0.219 * 0.05 = 0.01095
+     Δy = 0.219 * 0.05 = 0.01095
+     Δθ = (0.1 - 0.02) * 0.05 = 0.004
+
+     x_new = 2.5 + 0.01095 = 2.51095
+     y_new = 3.1 + 0.01095 = 3.11095
+     θ_new = (0.785 + 0.004) % 2π = 0.789
+
+  4. Verificar colisión:
+     Segmento: [(2.5, 3.1), (2.51095, 3.11095)]
+     Resultado: SIN COLISIÓN
+     Partícula se mantiene: (2.51095, 3.11095, 0.789)
+
+═══════════════════════════════════════════════════════════════════════════
+
+PASO 2: MEASUREMENT UPDATE (resample) [cada 10 ciclos]
+  ──────────────────────────────────────
+
+  1. Obtener medida predicha:
+     _sense((2.51095, 3.11095, 0.789)):
+       ├─ Proyectar 8 rayos desde (2.51, 3.11) con ángulos:
+       │   0°, 1.5°, 3°, 4.5°, 6°, 7.5°, 9°, 10.5°
+       └─ Calcular distancia hasta obstáculo:
+          z_hat = [1.2, 0.8, 1.5, 2.1, 0.9, 1.3, 1.1, 0.7]
+
+  2. Extraer medidas reales (subsampled):
+     z_scan[índices] = [z_scan[0], z_scan[30], z_scan[60], ...]
+                     = [1.25, 0.75, 1.48, 2.15, 0.95, 1.28, 1.05, 0.68]
+
+  3. Evaluar probabilidad:
+     probability = 1.0
+
+     j=0: gaussian(μ=1.25, σ=0.1, x=1.2)
+          = exp(-0.5*((1.2-1.25)/0.1)²) / (0.1*√(2π))
+          ≈ 3.95
+          probability = 1.0 * 3.95 = 3.95
+
+     j=1: gaussian(μ=0.75, σ=0.1, x=0.8)
+          ≈ 2.41
+          probability = 3.95 * 2.41 ≈ 9.52
+
+     j=2: gaussian(μ=1.48, σ=0.1, x=1.5)
+          ≈ 3.97
+          probability = 9.52 * 3.97 ≈ 37.79
+
+     ... [j=3 a j=7]
+
+     RESULTADO FINAL:
+     probability ≈ 2.14e-8  ← Muy bajo (buena coincidencia)
+
+═══════════════════════════════════════════════════════════════════════════
+
+PASO 3: RESAMPLING DECISION
+  ──────────────────────
+
+  1000 partículas tienen probabilidades calculadas.
+  Se normalizan y se remuestrean.
+
+  Si probabilidad de #500 es alta: Se replica
+  Si probabilidad de #500 es baja:  Se elimina
+
+═══════════════════════════════════════════════════════════════════════════
+
+PASO 4: POSE ESTIMATION
+  ──────────────────
+
+  Después de remuestrear: Pueden haber múltiples copias de #500 o ninguna.
+  
+  Se agrupan todas las partículas (1000):
+  ├─ DBSCAN: encuenta 1 cluster
+  ├─ LOCALIZED = True
+  └─ Pose media del cluster:
+     x_est ≈ 2.51 m
+     y_est ≈ 3.11 m
+     θ_est ≈ 0.789 rad
+
+═══════════════════════════════════════════════════════════════════════════
+
+PUBLICACIÓN:
+  /pose message:
+    pose.position.x = 2.51
+    pose.position.y = 3.11
+    pose.orientation = quaternion(θ=0.789)
+    localized = True
+
+═══════════════════════════════════════════════════════════════════════════
+```
+
+---
+
+## 7. ANÁLISIS: ¿POR QUÉ ESTOS BUCLES?
+
+```
+╔════════════════════════════════════════════════════════════════════════════╗
+║           ¿POR QUÉ ITERAMOS SOBRE CADA PARTÍCULA / RAYO?                 ║
+╚════════════════════════════════════════════════════════════════════════════╝
+
+BUCLE 1 (move):  N=1000 partículas
+  └─ MOTIVO: El filtro de partículas necesita actualizar TODAS las 
+     partículas simultáneamente con el mismo movimiento (pero con ruido
+     diferente para cada una). No podemos actualizar "la partícula 
+     promedio", necesitamos cada una por separado para mantener 
+     distribución de probabilidad.
+
+BUCLE 2 (resample):  N=1000 partículas
+  └─ MOTIVO: Cada partícula tiene una probabilidad independiente basada 
+     en cuán bien explica las observaciones. Necesitamos evaluar cada 
+     una para decidir cuáles son "buenas" y cuáles "malas".
+
+BUCLE 3 (_lidar_rays):  M=8 rayos
+  └─ MOTIVO: El sensor LiDAR tiene 240 medidas (~1.5° cada una, 360°/240).
+     Para eficiencia computacional, SOLO SE USAN 8 medidas equiespaciadas 
+     (cada 30 medidas). Simulamos estos 8 rayos desde la posición de cada
+     partícula y los comparamos con los 8 rayos reales.
+
+BUCLE 3b (_gaussian):  M=8 pares
+  └─ MOTIVO: El método probabilístico MULTIPLICA las probabilidades de 
+     cada medida (producto de gaussianas). Esto expresa la idea: 
+     "¿qué tan probable es observar TODAS estas medidas si el robot 
+     estuviese en esta posición?"
+     
+     Si una medida coincide bien (pequeña diferencia): gaussian ≈ 3.9
+     Si una medida es discrepante: gaussian ≈ 0.1
+     Si TODAS coinciden bien: probability = 3.9 * 3.8 * 3.7 * ... ≈ grande
+     Si ALGUNA es mala: probability ≈ pequeño (por el producto)
+
+BUCLE 4 (compute_pose):  N=1000 partículas para DBSCAN
+  └─ MOTIVO: DBSCAN necesita examinar todos los puntos para encontrar 
+     clusters espaciales. Un cluster = grupo de partículas cercanas = 
+     evidencia de que el robot está en esa región del mapa.
+```
+
+---
+
+## 8. COMPARATIVA: VERSIONES SIM vs REAL (tb3_ws)
+
+```
+╔════════════════════════════════════════════════════════════════════════════╗
+║              SINCRONIZACIÓN: SIM_WS vs TB3_WS                             ║
+╚════════════════════════════════════════════════════════════════════════════╝
+
+SIM_WS (ApproximateTimeSynchronizer):
+  ──────────────────────────────────
+
+  /odometry (50 Hz) ──┐
+                     ├─ [MessageFilter] ─── _compute_pose_callback()
+  /scan (50 Hz)  ────┤
+                     └─ Dispara cuando ambos llegan sincronizados
+
+  CARACTERÍSTICAS:
+  ├─ Sincronización automática por timestamp
+  ├─ Un único callback con ambos datos
+  ├─ move() + resample() en el MISMO callback
+  └─ Simple y limpio
+
+
+TB3_WS (Separate Callbacks + Timer):
+  ────────────────────────────────────
+
+  /odometry (30 Hz) ──┐
+                     ├─ _callback_odometry_saving_history()
+                     │  └─ Acumula en lista: _odometry_estimate_list
+                     │
+  /scan (10 Hz) ──────┤─ _callback_scan_saving_history()
+                     │  └─ Guarda en: _scan_last_measures
+                     │
+  Timer (2 Hz) ───────┤─ _timer_callback()
+                     │  ├─ FOR velocidad in _odometry_estimate_list:
+                     │  │  └─ move(v, w)  [múltiples]
+                     │  ├─ resample(_scan_last_measures)  [una sola]
+                     │  └─ publish pose
+                     │
+                     └─ Procesa en batches cada 2 segundos
+
+  CARACTERÍSTICAS:
+  ├─ Acumula múltiples updates de odometría (30 Hz) antes de medir
+  ├─ Una sola medida de scan (10 Hz) se procesa con todos los movimientos
+  ├─ Más eficiente: procesa 60 movimientos antes de gastar 400ms en resample
+  └─ Mejor para robots reales (sensores a diferentes frecuencias)
+
+
+EJEMPLO TEMPORAL:
+
+SIM_WS:
+  t=0:    odom + scan → callback → move + resample → /pose
+  t=20ms: odom + scan → callback → move + resample → /pose
+  ...
+
+TB3_WS:
+  t=0-2s: odom x5 (30Hz) → acumula
+          scan (10Hz) → guarda
+  
+  t=2s:   TIMER DISPARA
+          ├─ move (del odom en t=0)
+          ├─ move (del odom en t=0.4s)
+          ├─ move (del odom en t=0.8s)
+          ├─ move (del odom en t=1.2s)
+          ├─ move (del odom en t=1.6s)
+          ├─ resample (usando scan del t=1s)
+          └─ /pose
+
+  VENTAJA: Las 5 medidas de velocidad rápida (30Hz) se aplican 
+           antes de la actualización lenta (10Hz).
+```
+
+═══════════════════════════════════════════════════════════════════════════
