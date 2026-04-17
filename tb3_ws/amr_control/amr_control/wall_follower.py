@@ -4,8 +4,10 @@ import numpy as np
 import math
 import time
 
+from amr_control import amr_control_cpp
+
 # States: added Fixed_Front for real robot
-states = enum.Enum("states", "Front Turn_Right Turn_Left Fixed_Front" )
+states = enum.Enum("states", "Front Turn_Right Turn_Left Fixed_Front")
  
  
 class WallFollower:
@@ -80,9 +82,10 @@ class WallFollower:
         # TODO: 2.14. Complete the function body with your code (i.e., compute v and w).
         # self._logger.info(f"************************** Nº NANS: {sum(isinstance(v, float) and math.isnan(v) for v in z_scan)}")
  
-        self._front_dist = z_scan[-1] # Front distance
-        self._right_dist = z_scan[3 * len(z_scan) // 4] # Right distance
-        self._left_dist = z_scan[len(z_scan) // 4] # Left distance
+        scan_arr = np.ascontiguousarray(z_scan, dtype=np.float64)
+        self._front_dist, self._right_dist, self._left_dist = (
+            amr_control_cpp.compute_wall_distances(scan_arr)
+        )
 
         try:
             self._right_dist_error = self._wall_dist_target - self._right_dist

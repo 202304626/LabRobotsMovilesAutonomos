@@ -1,5 +1,7 @@
 import numpy as np
 
+from amr_control import amr_control_cpp
+
 
 class PurePursuit:
     """Class to follow a path using a simple pure pursuit controller."""
@@ -26,38 +28,28 @@ class PurePursuit:
         self._path: list[tuple[float, float]] = []
         self._simulation: bool = simulation
 
+        self._is_aligned = False
+        self._last_closest_idx = 0
+
     def compute_commands(self, x: float, y: float, theta: float) -> tuple[float, float]:
         if not self._path or len(self._path) == 0:
             return 0.0, 0.0
 
-        _, closest_idx = self._find_closest_point(x, y)
-        target = self._find_target_point((x, y), closest_idx)
-
-        dx = target[0] - x
-        dy = target[1] - y
-        l = np.hypot(dx, dy)
-
-        if l < 1e-6:
-            return 0.0, 0.0
-
-        raw_alpha = np.arctan2(dy, dx) - theta
-        alpha = (raw_alpha + np.pi) % (2 * np.pi) - np.pi
-
-        v_nominal = 0.08
-        v_min = 0.05
-        w_max = 0.5
-        angle_stop = np.pi / 3
-
-        
-
-        v = max(v_min, v_nominal * (1.0 - abs(alpha) / angle_stop))
-
-        v = 0.1
-
-        w = 2.0 * v * np.sin(alpha) / max(l, self._lookahead_distance)
-        # w = float(np.clip(w, -w_max, w_max))
-
-        return float(v), +w
+        v, w, closest_idx, is_aligned = amr_control_cpp.compute_pure_pursuit(
+            x,
+            y,
+            theta,
+            self._path_arr,
+            self._last_closest_idx,
+            self._lookahead_distance,
+            0.10,   # v_max  (robot real: velocidad máxima segura)
+            0.05,   # v_min
+            0.50,   # w_max  (robot real: giro máximo seguro)
+            self._is_aligned,
+        )
+        self._last_closest_idx = closest_idx
+        self._is_aligned = is_aligned
+        return float(v), float(w)
 
     @property
     def path(self) -> list[tuple[float, float]]:
@@ -68,6 +60,9 @@ class PurePursuit:
     def path(self, value: list[tuple[float, float]]) -> None:
         """Path setter."""
         self._path = value
+        self._path_arr = np.ascontiguousarray(value, dtype=np.float64)
+        self._is_aligned = False
+        self._last_closest_idx = 0
 
     def _find_closest_point(self, x: float, y: float) -> tuple[tuple[float, float], int]:
         """Find the closest path point to the current robot pose.

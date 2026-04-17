@@ -7,11 +7,17 @@
   <maintainer email="jboal@comillas.edu">Jaime Boal</maintainer>
   <license>Apache License 2.0</license>
 
-  <exec_depend>rclpy</exec_depend>
-  <exec_depend>message_filters</exec_depend>
-  <exec_depend>amr_msgs</exec_depend>
-  <exec_depend>geometry_msgs</exec_depend>
-  <exec_depend>nav_msgs</exec_depend>
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <buildtool_depend>ament_cmake_python</buildtool_depend>
+
+  <depend>rclpy</depend>
+  <depend>message_filters</depend>
+  <depend>amr_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>nav_msgs</depend>
+
+  <!-- Dependencias C++ -->
+  <depend>pybind11_vendor</depend>
 
   <test_depend>ament_copyright</test_depend>
   <test_depend>ament_flake8</test_depend>
@@ -19,6 +25,6 @@
   <test_depend>python3-pytest</test_depend>
 
   <export>
-    <build_type>ament_python</build_type>
+    <build_type>ament_cmake</build_type>
   </export>
 </package>
