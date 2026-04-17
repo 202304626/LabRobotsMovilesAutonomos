@@ -1,0 +1,490 @@
+import datetime
+import numpy as np
+import os
+import pytz
+import random
+import time
+
+# This try-except enables local debugging of the PRM class
+try:
+    from amr_planning.maps import Map
+except ImportError:
+    from maps import Map
+
+from matplotlib import pyplot as plt
+
+
+from ament_index_python.packages import get_package_share_directory
+
+
+class PRM:
+    """Class to plan a path to a given destination using probabilistic roadmaps (PRM)."""
+
+    def __init__(
+        self,
+        map_path: str,
+        obstacle_safety_distance=0.08,
+        use_grid: bool = False,
+        node_count: int = 50,
+        grid_size=0.1,
+        connection_distance: float = 0.15,
+        sensor_range_max: float = 8.0,
+        logger=None,
+        simulation: bool = False,
+    ):
+        """Probabilistic roadmap (PRM) class initializer.
+
+        Args:
+            map_path: Path to the map of the environment.
+            obstacle_safety_distance: Distance to grow the obstacles by [m].
+            use_grid: Sample from a uniform distribution when False.
+                Use a fixed step grid layout otherwise.
+            node_count: Number of random nodes to generate. Only considered if use_grid is False.
+            grid_size: If use_grid is True, distance between consecutive nodes in x and y.
+            connection_distance: Maximum distance to consider adding an edge between two nodes [m].
+            sensor_range_max: Sensor measurement range [m].
+            logger: Logger object to output messages with different severity levels.
+            simulation: True if running in simulation, False if running on the real robot.
+
+        """
+        #################################################################
+        # Obtenemos la ruta absoluta al archivo del mapa de forma segura
+        pkg_dir = get_package_share_directory("amr_localization")
+
+        # OJO: Asumimos que map_path viene solo con el nombre del archivo (ej: "project.json")
+        # Si map_path ya trae "maps/project.json", puedes usar os.path.basename(map_path)
+        # para quedarte solo con el nombre y que el join no falle.
+        # Por seguridad, usaremos os.path.basename:
+        map_filename = os.path.basename(map_path)
+        absolute_map_path = os.path.join(pkg_dir, "maps", map_filename)
+
+        self._map = Map(
+            absolute_map_path,  # <--- Pasamos la ruta absoluta
+            sensor_range_max,
+            compiled_intersect=False,
+            use_regions=False,
+            safety_distance=0.08,
+        )
+        #############################################################
+        """
+        self._map: Map = Map(
+            map_path,
+            sensor_range=sensor_range_max,
+            safety_distance=obstacle_safety_distance,
+            compiled_intersect=False,
+            use_regions=False,
+        )
+        """
+
+        self._graph: dict[tuple[float, float], list[tuple[float, float]]] = self._create_graph(
+            use_grid,
+            node_count,
+            grid_size,
+            connection_distance,
+        )
+
+        self._logger = logger
+        self._simulation: bool = simulation
+
+        self._figure, self._axes = plt.subplots(1, 1, figsize=(7, 7))
+        self._timestamp = datetime.datetime.now(pytz.timezone("Europe/Madrid")).strftime(
+            "%Y-%m-%d_%H-%M-%S"
+        )
+
+    def find_path(
+        self, start: tuple[float, float], goal: tuple[float, float]
+    ) -> list[tuple[float, float]]:
+        """Computes the shortest path from a start to a goal location using the A* algorithm.
+
+        Args:
+            start: Initial location in (x, y) [m] format.
+            goal: Destination in (x, y) [m] format.
+
+        Returns:
+            Path to the destination. The first value corresponds to the initial location.
+
+        """
+        # Check if the goal is valid
+        if not self._map.contains(goal):
+            raise ValueError("Goal location is outside the environment.")
+
+        h = {
+            node: np.linalg.norm(np.array(node) - np.array(goal)) for node in self._graph.keys()
+        }  # Heuristic function
+
+        ancestors: dict[tuple[float, float], tuple[float, float]] = {}  # {(x, y: (x_prev, y_prev)}
+
+        # TODO: 4.3. Complete the function body (i.e., replace the code below).
+        path: list[tuple[float, float]] = []
+
+        # Find the closest nodes in the graph to the start and goal locations
+        closest_start_node = min(
+            self._graph.keys(), key=lambda node: np.linalg.norm(np.array(node) - np.array(start))
+        )
+        closest_goal_node = min(
+            self._graph.keys(), key=lambda node: np.linalg.norm(np.array(node) - np.array(goal))
+        )
+
+        ancestors[goal] = closest_goal_node
+        ancestors[closest_start_node] = start
+
+        g = 0
+        f = h[closest_start_node] + g
+        open_list = {closest_start_node: (f, g)}  # {(x, y): (f,g)}
+        closed_list = set()  # set of (x, y) tuples
+
+        while len(open_list.keys()) != 0:
+            current_node = min(
+                open_list.keys(), key=lambda node: open_list[node][0]
+            )  # Get the node with min f
+
+            current_g = open_list[current_node][1]
+
+            if current_node == closest_goal_node:
+                path = self._reconstruct_path(start, goal, ancestors)
+                return path
+
+            closed_list.add(current_node)
+            del open_list[current_node]
+
+            neighbors = self._graph[current_node]
+            for neighbor in neighbors:
+                if neighbor in closed_list:
+                    continue
+
+                neigh_g = current_g + np.linalg.norm(np.array(current_node) - np.array(neighbor))
+                # check if new g is better than old g
+                if neighbor not in open_list or neigh_g < open_list[neighbor][1]:
+                    ancestors[neighbor] = current_node
+                    g = neigh_g
+                    f = g + h[neighbor]
+                    open_list[neighbor] = (f, g)
+
+        raise ValueError("No path found from start to goal.")
+
+    @staticmethod
+    def smooth_path(
+        path: list[tuple[float, float]],
+        data_weight: float = 0.1,
+        smooth_weight: float = 0.3,
+        additional_smoothing_points: int = 0,
+        tolerance: float = 1e-6,
+    ) -> list[tuple[float, float]]:
+        """Computes a smooth path from a piecewise linear path.
+
+        Args:
+            path: Non-smoothed path to the goal (start location first).
+            data_weight: The larger, the more similar the output will be to the original path.
+            smooth_weight: The larger, the smoother the output path will be.
+            additional_smoothing_points: Number of equally spaced intermediate points to add
+                between two nodes of the original path.
+            tolerance: The algorithm will stop when after an iteration the smoothed path changes
+                less than this value.
+
+        Returns: Smoothed path (initial location first) in (x, y) [m] format.
+
+        """
+        # TODO: 4.5. Complete the function body (i.e., load smoothed_path).
+
+        ### Add additional points
+        if additional_smoothing_points > 0:
+            new_path = []
+            for i in range(len(path) - 1):
+                p_i = path[i]
+                p_next = path[i + 1]
+
+                new_path.append(p_i)
+
+                vector = np.array(p_next) - np.array(p_i)
+
+                for j in range(1, additional_smoothing_points + 1):
+                    intermediate_point = (
+                        p_i[0] + vector[0] * j / (additional_smoothing_points + 1),
+                        p_i[1] + vector[1] * j / (additional_smoothing_points + 1),
+                    )
+                    new_path.append(intermediate_point)
+
+            new_path.append(path[-1])
+
+            path = new_path
+
+        smoothed_path: list[tuple[float, float]] = []
+        s = np.array(path)
+
+        while True:
+            s_anterior = np.copy(s)
+            smoothed_path: list[tuple[float, float]] = [s[0]]
+            for i in range(1, len(path) - 1):
+                p_i = path[i]
+
+                s[i] = (
+                    s[i]
+                    + data_weight * (np.array(p_i) - np.array(s[i]))
+                    + smooth_weight * (s[i + 1] + s[i - 1] - 2 * s[i])
+                )
+                smoothed_path.append(s[i])
+
+            if np.sum(np.abs(s_anterior - s)) < tolerance:
+                smoothed_path.append(s[-1])
+                return smoothed_path
+
+    def plot(
+        self,
+        axes,
+        path: list[tuple[float, float]] = (),
+        smoothed_path: list[tuple[float, float]] = (),
+    ):
+        """Draws particles.
+
+        Args:
+            axes: Figure axes.
+            path: Path (start location first).
+            smoothed_path: Smoothed path (start location first).
+
+        Returns:
+            axes: Modified axes.
+
+        """
+        # Plot the nodes
+        x, y = zip(*self._graph.keys())
+        axes.plot(list(x), list(y), "co", markersize=1)
+
+        # Plot the edges
+        for node, neighbors in self._graph.items():
+            x_start, y_start = node
+
+            if neighbors:
+                for x_end, y_end in neighbors:
+                    axes.plot([x_start, x_end], [y_start, y_end], "c-", linewidth=0.25)
+
+        # Plot the path
+        if path:
+            x_val = [x[0] for x in path]
+            y_val = [x[1] for x in path]
+
+            axes.plot(x_val, y_val)  # Plot the path
+            axes.plot(x_val[1:-1], y_val[1:-1], "bo", markersize=4)  # Draw nodes as blue circles
+
+        # Plot the smoothed path
+        if smoothed_path:
+            x_val = [x[0] for x in smoothed_path]
+            y_val = [x[1] for x in smoothed_path]
+
+            axes.plot(x_val, y_val, "y")  # Plot the path
+            axes.plot(x_val[1:-1], y_val[1:-1], "yo", markersize=2)  # Draw nodes as yellow circles
+
+        if path or smoothed_path:
+            axes.plot(
+                x_val[0], y_val[0], "rs", markersize=7
+            )  # Draw a red square at the start location
+            axes.plot(
+                x_val[-1], y_val[-1], "g*", markersize=12
+            )  # Draw a green star at the goal location
+
+        return axes
+
+    def show(
+        self,
+        title: str = "",
+        path=(),
+        smoothed_path=(),
+        display: bool = False,
+        block: bool = False,
+        save_figure: bool = False,
+        save_dir: str = "images",
+    ):
+        """Displays the current particle set on the map.
+
+        Args:
+            title: Plot title.
+            path: Path (start location first).
+            smoothed_path: Smoothed path (start location first).
+            display: True to open a window to visualize the particle filter evolution in real-time.
+                Time consuming. Does not work inside a container unless the screen is forwarded.
+            block: True to stop program execution until the figure window is closed.
+            save_figure: True to save figure to a .png file.
+            save_dir: Image save directory.
+
+        """
+        figure = self._figure
+        axes = self._axes
+        axes.clear()
+
+        axes = self._map.plot(axes)
+        axes = self.plot(axes, path, smoothed_path)
+
+        axes.set_title(title)
+        figure.tight_layout()  # Reduce white margins
+
+        if display:
+            plt.show(block=block)
+            plt.pause(0.001)  # Wait for 1 ms or the figure won't be displayed
+
+        if display:
+            plt.show(block=block)
+
+        if save_figure:
+            save_path = os.path.join(os.path.dirname(__file__), "..", save_dir)
+
+            if not os.path.isdir(save_path):
+                os.makedirs(save_path)
+
+            file_name = f"{self._timestamp} {title.lower()}.png"
+            file_path = os.path.join(save_path, file_name)
+            figure.savefig(file_path)
+
+    def _connect_nodes(
+        self,
+        graph: dict[tuple[float, float], list[tuple[float, float]]],
+        connection_distance: float = 0.15,
+    ) -> dict[tuple[float, float], list[tuple[float, float]]]:
+        """Connects every generated node with all the nodes that are closer than a given threshold.
+
+        Args:
+            graph: A dictionary with (x, y) [m] tuples as keys and empty lists as values.
+            connection_distance: Maximum distance to consider adding an edge between two nodes [m].
+
+        Returns: A modified graph with lists of connected nodes as values.
+
+        """
+        # TODO: 4.2. Complete the missing function body with your code.
+
+        for node in graph.keys():
+            for other_node in graph.keys():
+                if node != other_node:
+                    distance = np.linalg.norm(np.array(node) - np.array(other_node))
+                    if (  # Change for cross
+                        distance <= connection_distance
+                        and not self._map.crosses([node, other_node])
+                    ):
+                        graph[node].append(other_node)
+
+        return graph
+
+    def _create_graph(
+        self,
+        use_grid: bool = False,
+        node_count: int = 50,
+        grid_size=0.1,
+        connection_distance: float = 0.15,
+    ) -> dict[tuple[float, float], list[tuple[float, float]]]:
+        """Creates a roadmap as a graph with edges connecting the closest nodes.
+
+        Args:
+            use_grid: Sample from a uniform distribution when False.
+                Use a fixed step grid layout otherwise.
+            node_count: Number of random nodes to generate. Only considered if use_grid is False.
+            grid_size: If use_grid is True, distance between consecutive nodes in x and y.
+            connection_distance: Maximum distance to consider adding an edge between two nodes [m].
+
+        Returns: A dictionary with (x, y) [m] tuples as keys and lists of connected nodes as values.
+            Key elements are rounded to a fixed number of decimal places to allow comparisons.
+
+        """
+        graph = self._generate_nodes(use_grid, node_count, grid_size)
+        graph = self._connect_nodes(graph, connection_distance)
+
+        return graph
+
+    def _generate_nodes(
+        self, use_grid: bool = False, node_count: int = 50, grid_size=0.1
+    ) -> dict[tuple[float, float], list[tuple[float, float]]]:
+        """Creates a set of valid nodes to build a roadmap with.
+
+        Args:
+            use_grid: Sample from a uniform distribution when False.
+                Use a fixed step grid layout otherwise.
+            node_count: Number of random nodes to generate. Only considered if use_grid is False.
+            grid_size: If use_grid is True, distance between consecutive nodes in x and y.
+
+        Returns: A dictionary with (x, y) [m] tuples as keys and empty lists as values.
+            Key elements are rounded to a fixed number of decimal places to allow comparisons.
+
+        """
+        graph: dict[tuple[float, float], list[tuple[float, float]]] = {}
+
+        # TODO: 4.1. Complete the missing function body with your code.
+        x_min, y_min, x_max, y_max = self._map.bounds()
+
+        if use_grid:
+            grid = np.mgrid[
+                x_min : x_max + grid_size : grid_size, y_min : y_max + grid_size : grid_size
+            ]
+            for x in grid[0].flat:
+                for y in grid[1].flat:
+                    if self._map.contains((x, y)):
+                        graph[(x, y)] = []
+        else:
+            for _ in range(node_count):
+                valid = False
+                while not valid:
+                    particle_x = np.random.uniform(low=x_min, high=x_max)
+                    particle_y = np.random.uniform(low=y_min, high=y_max)
+
+                    if self._map.contains((particle_x, particle_y)):
+                        valid = True
+                        graph[(particle_x, particle_y)] = []
+
+        return graph
+
+    def _reconstruct_path(
+        self,
+        start: tuple[float, float],
+        goal: tuple[float, float],
+        ancestors: dict[tuple[int, int], tuple[int, int]],
+    ) -> list[tuple[float, float]]:
+        """Computes the path from the start to the goal given the ancestors of a search algorithm.
+
+        Args:
+            start: Initial location in (x, y) [m] format.
+            goal: Goal location in (x, y) [m] format.
+            ancestors: Dictionary with (x, y) [m] tuples as keys and the node (x_prev, y_prev) [m]
+                from which it was added to the open list as values.
+
+        Returns: Path to the goal (start location first) in (x, y) [m] format.
+
+        """
+        path: list[tuple[float, float]] = []
+
+        # TODO: 4.4. Complete the missing function body with your code.
+
+        current_node = goal
+        while current_node != start:
+            path.append(current_node)
+            current_node = ancestors[current_node]
+        path.append(start)
+        path.reverse()
+
+        return path
+
+
+if __name__ == "__main__":
+    map_name = "project"
+    map_path = os.path.realpath(
+        os.path.join(os.path.dirname(__file__), "..", "maps", map_name + ".json")
+    )
+
+    # Create the roadmap
+    start_time = time.perf_counter()
+    prm = PRM(map_path, use_grid=True, node_count=500, grid_size=0.1, connection_distance=0.20)
+    roadmap_creation_time = time.perf_counter() - start_time
+
+    print(f"Roadmap creation time: {roadmap_creation_time:1.3f} s")
+
+    # Find the path
+    start_time = time.perf_counter()
+    path = prm.find_path(start=(-1.0, -1.0), goal=(1.0, 1.0))
+    pathfinding_time = time.perf_counter() - start_time
+
+    print(f"Pathfinding time: {pathfinding_time:1.3f} s")
+
+    # Smooth the path
+    start_time = time.perf_counter()
+    smoothed_path = prm.smooth_path(
+        path, data_weight=0.1, smooth_weight=0.1, additional_smoothing_points=3
+    )
+    smoothing_time = time.perf_counter() - start_time
+
+    print(f"Smoothing time: {smoothing_time:1.3f} s")
+
+    prm.show(path=path, smoothed_path=smoothed_path, save_figure=True)
