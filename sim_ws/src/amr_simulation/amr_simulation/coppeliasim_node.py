@@ -80,34 +80,17 @@ class CoppeliaSimNode(LifecycleNode):
                 msg_type=LaserScan, topic="scan", qos_profile=qos_lidar_profile
             )
 
-            # Subscribers
-            if not enable_localization:
-                self._cmd_vel_suscriber = self.create_subscription(
-                    TwistStamped, "cmd_vel", self._next_step_callback, 10
+            self._latest_pose = PoseStamped()
+            self._latest_pose.localized = False
+
+            self._cmd_vel_subscriber = self.create_subscription(
+                TwistStamped, "cmd_vel", self._next_step_callback, 10
+            )
+
+            if enable_localization:
+                self._pose_subscriber = self.create_subscription(
+                    PoseStamped, "pose", self._pose_callback, 10
                 )
-
-            else:
-                self._subscribers: list[message_filters.Subscriber] = []
-
-                self._subscribers.append(
-                    message_filters.Subscriber(
-                        self, TwistStamped, "cmd_vel", qos_profile=QoSProfile(depth=10)
-                    )
-                )
-
-                self._subscribers.append(
-                    message_filters.Subscriber(
-                        self, PoseStamped, "pose", qos_profile=QoSProfile(depth=10)
-                    )
-                )
-
-                ts = message_filters.ApproximateTimeSynchronizer(
-                    self._subscribers,
-                    queue_size=10,
-                    slop=10,
-                )
-
-                ts.registerCallback(self._next_step_callback)
 
         except Exception:
             self.get_logger().error(f"{traceback.format_exc()}")
@@ -139,32 +122,31 @@ class CoppeliaSimNode(LifecycleNode):
         except AttributeError:
             pass
 
-    def _next_step_callback(self, cmd_vel_msg: TwistStamped, pose_msg: PoseStamped = PoseStamped()):
+    def _pose_callback(self, pose_msg: PoseStamped) -> None:
+        """Asynchronously updates the latest known pose."""
+        self._latest_pose = pose_msg
+
+    def _next_step_callback(self, cmd_vel_msg: TwistStamped):
         """Subscriber callback. Executes a simulation step and publishes the new measurements.
 
-                Args:
-                    cmd_vel_msg: Message containing linear (v) and angular (w) speed commands.
-                    pose_msg: Message containing the estimated robot pose.
-        1
+        Args:
+            cmd_vel_msg: Message containing linear (v) and angular (w) speed commands.
         """
         if hasattr(self, "_goal_reached") and self._goal_reached:
             return
 
-        self._check_estimated_pose(pose_msg)
+        self._check_estimated_pose(self._latest_pose)
 
         v: float = cmd_vel_msg.twist.linear.x
         w: float = cmd_vel_msg.twist.angular.z
 
-        # Execute simulation step
         self._robot.move(v, w)
         self._coppeliasim.next_step()
         z_scan, z_v, z_w = self._robot.sense()
 
-        # Check goal
         if self._check_goal():
             return
 
-        # Publish
         self._publish_odometry(z_v, z_w)
         self._publish_scan(z_scan)
 
@@ -291,9 +273,6 @@ def main(args=None):
     coppeliasim_node.destroy_node()
     rclpy.try_shutdown()
 
-
-if __name__ == "__main__":
-    main()
 
 if __name__ == "__main__":
     main()
