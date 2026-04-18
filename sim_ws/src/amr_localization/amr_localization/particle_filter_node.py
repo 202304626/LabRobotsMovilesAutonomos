@@ -166,14 +166,14 @@ class ParticleFilterNode(LifecycleNode):
         pose = (float("inf"), float("inf"), float("inf"))
         # VÍA LENTA: Calcular probabilidades y DBSCAN SOLO cada 10 pasos
         if not self._steps % self._steps_btw_sense_updates:
-            start_time = time.perf_counter()
+            # start_time = time.perf_counter()
             self._particle_filter.resample(z_scan)
-            sense_time = time.perf_counter() - start_time
-            self.get_logger().warning(f"Sense step time: {sense_time:6.3f} s")
-            start_time = time.perf_counter()
+            # sense_time = time.perf_counter() - start_time
+            # self.get_logger().warning(f"Sense step time: {sense_time:6.3f} s")
+            # start_time = time.perf_counter()
             self._localized, pose = self._particle_filter.compute_pose()  # DBSCAN o Media
-            clustering_time = time.perf_counter() - start_time
-            self.get_logger().warning(f"Clustering time: {clustering_time:6.3f} s")
+            # clustering_time = time.perf_counter() - start_time
+            # self.get_logger().warning(f"Clustering time: {clustering_time:6.3f} s")
         else:
             # VÍA RÁPIDA: Si no toca resample, pero estamos localizados,
             # actualizamos la pose usando la media (muy rápido)
