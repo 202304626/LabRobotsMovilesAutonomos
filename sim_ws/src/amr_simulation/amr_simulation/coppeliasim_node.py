@@ -114,8 +114,8 @@ class CoppeliaSimNode(LifecycleNode):
                 # We wait until we receive all the measurements, and then we invoke the callback
                 ts = message_filters.ApproximateTimeSynchronizer(
                     self._subscribers,
-                    queue_size=4,  # number of messages of each topic we need to receive until we are "completed"
-                    slop=1,  # max delay in seconds to consider that 2 messages are able to be syncronized
+                    queue_size=5,  # number of messages of each topic we need to receive until we are "completed"
+                    slop=10,  # max delay in seconds to consider that 2 messages are able to be syncronized
                 )
 
                 # We register the callback that we want to execute once the measurements are received
@@ -161,6 +161,9 @@ class CoppeliaSimNode(LifecycleNode):
                     pose_msg: Message containing the estimated robot pose.
         1
         """
+        if hasattr(self, '_goal_reached') and self._goal_reached:
+            return
+        
         # Check estimated pose
         self._check_estimated_pose(pose_msg)
 
@@ -236,6 +239,7 @@ class CoppeliaSimNode(LifecycleNode):
             _, _, _, goal_found = self._coppeliasim.check_position(self._goal[0], self._goal[1])
 
             if goal_found:
+                self._goal_reached = True
                 self.get_logger().warn("Congratulations, you reached the goal!")
                 execution_time, simulated_time, steps = self._coppeliasim.stop_simulation()
                 self._print_statistics(execution_time, simulated_time, steps)

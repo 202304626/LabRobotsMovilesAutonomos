@@ -160,20 +160,20 @@ class ParticleFilterNode(LifecycleNode):
         self._steps += 1
 
         # Publish
-        self._publish_pose_estimate(x_h, y_h, theta_h)
+        self._publish_pose_estimate(x_h, y_h, theta_h, odom_msg.header.stamp)
 
     def _execute_measurement_step(self, z_scan: list[float]) -> tuple[float, float, float]:
         pose = (float("inf"), float("inf"), float("inf"))
         # VÍA LENTA: Calcular probabilidades y DBSCAN SOLO cada 10 pasos
         if not self._steps % self._steps_btw_sense_updates:
-            # start_time = time.perf_counter()
+            start_time = time.perf_counter()
             self._particle_filter.resample(z_scan)
-            # sense_time = time.perf_counter() - start_time
-            # self.get_logger().info(f"Sense step time: {sense_time:6.3f} s")
-            # start_time = time.perf_counter()
+            sense_time = time.perf_counter() - start_time
+            self.get_logger().warning(f"Sense step time: {sense_time:6.3f} s")
+            start_time = time.perf_counter()
             self._localized, pose = self._particle_filter.compute_pose()  # DBSCAN o Media
-            # clustering_time = time.perf_counter() - start_time
-            # self.get_logger().info(f"Clustering time: {clustering_time:6.3f} s")
+            clustering_time = time.perf_counter() - start_time
+            self.get_logger().warning(f"Clustering time: {clustering_time:6.3f} s")
         else:
             # VÍA RÁPIDA: Si no toca resample, pero estamos localizados,
             # actualizamos la pose usando la media (muy rápido)
@@ -198,7 +198,7 @@ class ParticleFilterNode(LifecycleNode):
         if self._enable_plot:
             self._particle_filter.show("Move", save_figure=True)
 
-    def _publish_pose_estimate(self, x_h: float, y_h: float, theta_h: float) -> None:
+    def _publish_pose_estimate(self, x_h: float, y_h: float, theta_h: float, stamp) -> None:
         """Publishes the robot's pose estimate in a custom amr_msgs.msg.PoseStamped message.
 
         Args:
@@ -212,7 +212,7 @@ class ParticleFilterNode(LifecycleNode):
         # Create the msg
         msg = PoseStamped()
         msg.localized = self._localized  # We add this information wether is true or false
-        msg.header.stamp = self.get_clock().now().to_msg()  # We add the header (stamp)
+        msg.header.stamp = stamp  # We add the header (stamp)
 
         if self._localized:  # If the robot is localized, we add the pose info to the msg
             msg.pose.position.x = x_h

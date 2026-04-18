@@ -97,8 +97,8 @@ class WallFollowerNode(LifecycleNode):
             # We wait until we receive all the measurements, and then we invoke the callback
             ts = message_filters.ApproximateTimeSynchronizer(
                 self._subscribers,
-                queue_size=4,  # number of messages of each topic we need to receive until we are "completed"
-                slop=1,  # max delay in seconds to consider that 2 messages are able to be syncronized
+                queue_size=5,  # number of messages of each topic we need to receive until we are "completed"
+                slop=10,  # max delay in seconds to consider that 2 messages are able to be syncronized
             )
 
             # We register the callback that we want to execute once the measurements are received
