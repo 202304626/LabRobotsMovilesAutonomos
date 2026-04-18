@@ -339,9 +339,13 @@ class PRM:
         if not pairs_list:
             return graph
         # Preparamos TODOS los pares en un solo Array NumPy Nx4
-        segments_array = np.empty((len(pairs_list), 4), dtype=np.float64)
-        for idx, (i, j) in enumerate(pairs_list):
-            segments_array[idx] = [nodes[i][0], nodes[i][1], nodes[j][0], nodes[j][1]]
+        pairs_array = np.array(list(pairs)) # Array de índices Nx2
+        nodes_array = np.array(nodes)       # Array de nodos Mx2
+        # Obtenemos todos los puntos de inicio y fin de una vez
+        starts = nodes_array[pairs_array[:, 0]]
+        ends = nodes_array[pairs_array[:, 1]]
+        # Los concatenamos horizontalmente para tener el formato Nx4
+        segments_array = np.hstack((starts, ends))
 
         # ¡¡EL GRAN LLAMADO A C++!! Verifica miles de segmentos en menos de 1ms
         crosses_mask = self._map.batch_crosses(segments_array)
