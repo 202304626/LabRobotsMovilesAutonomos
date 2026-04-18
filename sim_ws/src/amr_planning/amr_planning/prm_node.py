@@ -37,8 +37,6 @@ class PRMNode(LifecycleNode):
             state: Current lifecycle state.
 
         """
-        # self.get_logger().info(f"Transitioning from '{state.label}' to 'inactive' state.")
-
         try:
             # Parameters
             connection_distance = (
@@ -82,14 +80,11 @@ class PRMNode(LifecycleNode):
                 grid_size,
                 connection_distance,
                 simulation=self._simulation,
-                logger=None,  # Replace None with self.get_logger() to enable logging in the class
+                logger=None,
             )
 
-            # Publishers
-            # TODO: 4.6. Create the /path publisher (Path message).
             self._path_publisher = self.create_publisher(Path, "/path", qos_profile=10)
 
-            # Subscribers
             self._subscriber_pose = self.create_subscription(
                 AmrPoseStamped, "pose", self._path_callback, 10
             )
@@ -143,23 +138,24 @@ class PRMNode(LifecycleNode):
             path: Smoothed path (initial location first) in (x, y) format.
 
         """
-        # TODO: 4.7. Complete the function body with your code (i.e., replace the pass statement).
-
         msg = Path()
-        msg.header.stamp = self.get_clock().now().to_msg()
-        msg.header.frame_id = "map"
+
+        header = msg.header
+        header.stamp = self.get_clock().now().to_msg()
+        header.frame_id = "map"
 
         poses_list = []
+        append_pose = poses_list.append
 
-        for point in path:
+        for x, y in path:
             pose_msg = PoseStamped()
-            pose_msg.header = msg.header
+            pose_msg.header = header
 
-            pose_msg.pose.position.x = float(point[0])
-            pose_msg.pose.position.y = float(point[1])
-            pose_msg.pose.position.z = 0.0
+            position = pose_msg.pose.position
+            position.x = float(x)
+            position.y = float(y)
 
-            poses_list.append(pose_msg)
+            append_pose(pose_msg)
 
         msg.poses = poses_list
 

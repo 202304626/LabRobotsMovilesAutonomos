@@ -32,7 +32,7 @@ class WallFollower:
         self._logger = logger
         self._simulation: bool = simulation
 
-        self._front_distance_threshold = 0.23  # Distance threshold to obstacles in front [m]
+        self._front_distance_threshold = 0.23
         self.expected_turning_distance = self._front_distance_threshold * np.sqrt(2) * 1.3
 
         self._x_vel = 0.15
@@ -43,7 +43,6 @@ class WallFollower:
         self._left_dist = 0
 
         self._last_right_error = 0
-        # self._last_front_error = 0
         self._last_left_error = 0
 
         self._right_dist_error = 0
@@ -52,7 +51,6 @@ class WallFollower:
         self._wall_dist_target = 0.2
         self._whole_path_width = 0.4
 
-        # Controller gains
         self._Kp = 4
         self._Kd = 5
 
@@ -75,7 +73,6 @@ class WallFollower:
 
         """
 
-        # TODO: 2.14. Complete the function body with your code (i.e., compute v and w).
         scan_arr = np.ascontiguousarray(z_scan, dtype=np.float64)
         self._front_dist, self._right_dist, self._left_dist = (
             amr_control_cpp.compute_wall_distances(scan_arr)
@@ -122,23 +119,18 @@ class WallFollower:
             self._handle_turn()
             return 0.0, 0.0
 
-        # Controller for angular velocity
         w_vel = self.get_w_vel()
 
-        # Everytime front velocity
-        x_vel = (self.LINEAR_SPEED_MAX) - abs(w_vel) * (
-            self.TRACK / 2
-        )  # Maybe we can calculate how much we can put here, and make it faster
+        x_vel = (self.LINEAR_SPEED_MAX) - abs(w_vel) * (self.TRACK / 2)
 
         return x_vel, w_vel
 
     def _handle_turn(self):
 
-        # Reset error
         self._right_dist_error = 0
         self._left_dist_error = 0
 
-        diff = self._right_dist - self._left_dist  # Here maybe put a threshold
+        diff = self._right_dist - self._left_dist
 
         if abs(diff) <= 0.05:
             self._state = random.choice([states.Turn_Left, states.Turn_Right])
@@ -152,23 +144,18 @@ class WallFollower:
             self._followed_wall = "left"
 
     def _handle_turn_right(self):
-        # Just rotate condition and assign direction
         if self._state == states.Turn_Right:
             return (
                 0.0,
                 -2.5,
-            )  # May we can see how much we can put here, like the max, and optimice time
+            )
 
     def _handle_turn_left(self):
         if self._state == states.Turn_Left:
             return (
                 0.0,
                 2.5,
-            )  # May we can see how much we can put here, like the max, and optimice time
-
-    def _safe_min(self, values, default=8.0):
-        vals = [v for v in values if v is not None and not math.isinf(v) and not math.isnan(v)]
-        return min(vals) if vals else default
+            )
 
     def get_w_vel(self):
 

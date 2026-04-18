@@ -88,7 +88,6 @@ class Map:
         self._safe_map_segments_array = np.array(safe_segments_list, dtype=np.float64)
 
     def batch_contains(self, points: np.ndarray) -> np.ndarray:
-        # Importamos el módulo que acabamos de compilar en C++
 
         if not points.flags["C_CONTIGUOUS"]:
             points = np.ascontiguousarray(points)

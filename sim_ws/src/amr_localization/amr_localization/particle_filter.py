@@ -111,7 +111,7 @@ class ParticleFilter:
         if self._localized:
             std_x = np.std(self._particles[:, 0])
             std_y = np.std(self._particles[:, 1])
-            # ¡Importante! No re-inundamos el mapa, solo volvemos a usar DBSCAN
+
             if std_x < 0.4 and std_y < 0.4:
                 x_mean = np.mean(self._particles[:, 0])
                 y_mean = np.mean(self._particles[:, 1])
@@ -125,10 +125,10 @@ class ParticleFilter:
                     self._logger.warn(
                         "Pérdida de convergencia, re-activando DBSCAN (Sin re-esparcir)"
                     )
+
         if not self._localized and self._iteration % 5 != 0:
             return False, (float("nan"), float("nan"), float("nan"))
 
-        # --- MODO LOCALIZACIÓN (DBSCAN) ---
         particles_projected = np.array(self._particles, dtype=float)
         theta = particles_projected[:, -1]
         particles_projected = np.hstack(
@@ -143,7 +143,7 @@ class ParticleFilter:
         if n_clusters == 1:
             self._localized = True
             cluster_particles = self._particles[indexes]
-            # Reducción SEGURA
+
             if len(cluster_particles) > self._localized_particle_count:
                 indices_elegidos = np.random.choice(
                     len(cluster_particles), self._localized_particle_count, replace=False
@@ -158,36 +158,25 @@ class ParticleFilter:
                 np.mean(np.sin(self._particles[:, -1])), np.mean(np.cos(self._particles[:, -1]))
             ) % (2 * math.pi)
             return True, (x_mean, y_mean, theta_mean)
+
         elif n_clusters > 1:
-            # 1. Decidir cuántas partículas queremos mantener en esta iteración.
-            # Por ejemplo, 100 por cada clúster, con un mínimo de 400 y un máximo de 3000.
             target_count = min(
                 self._initial_particle_count,
                 max(int(100 * n_clusters), self._localized_particle_count),
             )
 
-            # 2. Si el array actual es más grande que nuestro objetivo, lo reducimos físicamente.
             if len(self._particles) > target_count:
-                # Extraemos todas las partículas que el DBSCAN consideró parte de algún clúster (labels != -1)
                 core_particles = self._particles[labels != -1]
-
                 if len(core_particles) > target_count:
-                    # Si hay demasiadas partículas "buenas", nos quedamos con una muestra aleatoria
                     indices_elegidos = np.random.choice(
                         len(core_particles), target_count, replace=False
                     )
                     self._particles = np.ascontiguousarray(core_particles[indices_elegidos])
                 elif len(core_particles) > 0:
-                    # Si hay menos partículas "buenas" que el target, nos quedamos con todas ellas
                     self._particles = np.ascontiguousarray(core_particles)
 
-                # Actualizamos el contador oficial
                 self._particle_count = len(self._particles)
 
-                if self._logger:
-                    self._logger.info(
-                        f"Reduciendo partículas gradualmente: {n_clusters} clústeres -> {self._particle_count} partículas"
-                    )
         return False, (float("nan"), float("nan"), float("nan"))
 
     def move(self, v: float, w: float) -> None:
@@ -197,7 +186,6 @@ class ParticleFilter:
         if not self._particles.flags["C_CONTIGUOUS"]:
             self._particles = np.ascontiguousarray(self._particles)
 
-        # Esto hace el ruido, la trigonometría Y el bucle de colisiones a máxima velocidad
         amr_localization_cpp.move_and_collide_particles(
             self._particles, v, w, self._dt, self._sigma_v, self._sigma_w
         )
@@ -302,46 +290,45 @@ class ParticleFilter:
         initial_pose: tuple[float, float, float],
         initial_pose_sigma: tuple[float, float, float],
     ) -> np.ndarray:
-        """Draws N random valid particles using MASSIVE C++ BATCHING."""
+        """Draws N random valid particles optimized with Lazy Evaluation and no stacking."""
         particles = np.empty((particle_count, 3), dtype=float)
         x_min, y_min, x_max, y_max = self._map.bounds()
         x_o, y_o, theta_o = initial_pose
         x_o_std, y_o_std, theta_o_std = initial_pose_sigma
-        # Generamos el triple de partículas necesarias para asegurar que filtramos suficientes
-        batch_size = particle_count * 5
+
+        batch_size = particle_count * 2
         valid_count = 0
+
         while valid_count < particle_count:
             if global_localization:
-                batch_x = np.random.uniform(low=x_min, high=x_max, size=batch_size)
-                batch_y = np.random.uniform(low=y_min, high=y_max, size=batch_size)
-                batch_theta = np.random.choice(
-                    [0, np.pi / 2, np.pi, 3 * np.pi / 2], size=batch_size
+                batch_xy = np.random.uniform(
+                    low=[x_min, y_min], high=[x_max, y_max], size=(batch_size, 2)
                 )
             else:
-                batch_x = np.random.normal(loc=x_o, scale=x_o_std, size=batch_size)
-                batch_y = np.random.normal(loc=y_o, scale=y_o_std, size=batch_size)
-                batch_theta = np.random.normal(loc=theta_o, scale=theta_o_std, size=batch_size)
-            # Empaquetamos en una matriz Nx2 para C++
-            points_to_check = np.column_stack((batch_x, batch_y))
+                batch_xy = np.random.normal(
+                    loc=[x_o, y_o], scale=[x_o_std, y_o_std], size=(batch_size, 2)
+                )
 
-            # ¡MAGIA C++! Devuelve una máscara booleana instantánea
-            valid_mask = self._map.batch_contains(points_to_check)
+            valid_mask = self._map.batch_contains(batch_xy)
+            valid_xy = batch_xy[valid_mask]
 
-            # Filtramos con NumPy (Ultrarrápido, cero bucles Python)
-            valid_x = batch_x[valid_mask]
-            valid_y = batch_y[valid_mask]
-            valid_theta = batch_theta[valid_mask]
+            new_valid = len(valid_xy)
 
-            # Cuántas partículas válidas hemos conseguido en esta tanda
-            new_valid = len(valid_x)
             if new_valid > 0:
-                # Cuántas nos faltan para llenar el array
                 needed = particle_count - valid_count
                 take = min(new_valid, needed)
 
-                particles[valid_count : valid_count + take, 0] = valid_x[:take]
-                particles[valid_count : valid_count + take, 1] = valid_y[:take]
-                particles[valid_count : valid_count + take, 2] = valid_theta[:take] % (2 * math.pi)
+                particles[valid_count : valid_count + take, :2] = valid_xy[:take]
+
+                if global_localization:
+                    particles[valid_count : valid_count + take, 2] = np.random.choice(
+                        [0, np.pi / 2, np.pi, 3 * np.pi / 2], size=take
+                    )
+                else:
+                    particles[valid_count : valid_count + take, 2] = np.random.normal(
+                        loc=theta_o, scale=theta_o_std, size=take
+                    ) % (2 * math.pi)
 
                 valid_count += take
+
         return particles

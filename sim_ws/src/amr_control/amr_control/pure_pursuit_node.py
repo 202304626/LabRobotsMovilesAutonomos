@@ -18,7 +18,6 @@ class PurePursuitNode(LifecycleNode):
         """Pure pursuit node initializer."""
         super().__init__("pure_pursuit")
 
-        # Parameters
         self.declare_parameter("dt", 0.05)
         self.declare_parameter("lookahead_distance", 0.2)
         self.declare_parameter("simulation", False)
@@ -30,32 +29,27 @@ class PurePursuitNode(LifecycleNode):
             state: Current lifecycle state.
 
         """
-        # self.get_logger().info(f"Transitioning from '{state.label}' to 'inactive' state.")
 
         try:
-            # Parameters
             dt = self.get_parameter("dt").get_parameter_value().double_value
             lookahead_distance = (
                 self.get_parameter("lookahead_distance").get_parameter_value().double_value
             )
             self._simulation = self.get_parameter("simulation").get_parameter_value().bool_value
 
-            # Attribute and object initializations
             self._pure_pursuit = PurePursuit(
                 dt,
                 lookahead_distance,
                 simulation=self._simulation,
-                logger=self.get_logger(),  # Replace None with self.get_logger() to enable logging in the class
+                logger=self.get_logger(),
             )
 
             self.current_pose = None
             self.current_odom_filtered = None
             self._timer = self.create_timer(dt, self._control_loop_callback)
 
-            # Publishers
             self._publisher = self.create_publisher(TwistStamped, "cmd_vel", 10)
 
-            # Subscribers
             self._subscriber_pose = self.create_subscription(
                 PoseStamped, "pose", self._pose_callback, 10
             )
@@ -77,7 +71,6 @@ class PurePursuitNode(LifecycleNode):
             state: Current lifecycle state.
 
         """
-        # self.get_logger().info(f"Transitioning from '{state.label}' to 'active' state.")
 
         return super().on_activate(state)
 
@@ -101,7 +94,6 @@ class PurePursuitNode(LifecycleNode):
 
         """
         if self.current_pose is not None and self.current_pose.localized:
-            # Prefer the high-frequency EKF output if available
             if self.current_odom_filtered is not None:
                 x = self.current_odom_filtered.pose.pose.position.x
                 y = self.current_odom_filtered.pose.pose.position.y
@@ -110,7 +102,6 @@ class PurePursuitNode(LifecycleNode):
                 quat_y = self.current_odom_filtered.pose.pose.orientation.y
                 quat_z = self.current_odom_filtered.pose.pose.orientation.z
             else:
-                # Fallback to the raw particle filter pose
                 x = self.current_pose.pose.position.x
                 y = self.current_pose.pose.position.y
                 quat_w = self.current_pose.pose.orientation.w
@@ -121,11 +112,8 @@ class PurePursuitNode(LifecycleNode):
             _, _, theta = quat2euler((quat_w, quat_x, quat_y, quat_z))
             theta %= 2 * math.pi
 
-            # Execute pure pursuit
             v, w = self._pure_pursuit.compute_commands(x, y, theta)
-            # self.get_logger().info(f"Commands: v = {v:.3f} m/s, w = {w:+.3f} rad/s")
 
-            # Publish
             self._publish_velocity_commands(v, w)
 
     def _path_callback(self, path_msg: Path):
@@ -135,7 +123,6 @@ class PurePursuitNode(LifecycleNode):
             path_msg: Message containing the (smoothed) path.
 
         """
-        # TODO: 4.8. Complete the function body with your code (i.e., replace the pass statement).
         path_coordinates = [(pose.pose.position.x, pose.pose.position.y) for pose in path_msg.poses]
 
         self._pure_pursuit.path = path_coordinates

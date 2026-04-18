@@ -98,14 +98,11 @@ class ParticleFilterNode(LifecycleNode):
             if self._enable_plot:
                 self._particle_filter.show("Initialization", save_figure=True)
 
-            # Publishers
-            # TODO: 3.1. Create the /pose publisher (PoseStamped message).
             self._pose_publisher = self.create_publisher(PoseStamped, "pose", 10)
             self._pose_cov_publisher = self.create_publisher(
                 PoseWithCovarianceStamped, "pose_cov", 10
             )
 
-            # Subscribers
             scan_qos_profile = QoSProfile(
                 history=QoSHistoryPolicy.KEEP_LAST,
                 depth=10,
@@ -137,8 +134,6 @@ class ParticleFilterNode(LifecycleNode):
             state: Current lifecycle state.
 
         """
-        # self.get_logger().info(f"Transitioning from '{state.label}' to 'active' state.")
-
         return super().on_activate(state)
 
     def _compute_pose_callback(self, odom_msg: Odometry, scan_msg: LaserScan):
@@ -149,34 +144,25 @@ class ParticleFilterNode(LifecycleNode):
             scan_msg: Message containing LiDAR sensor readings.
 
         """
-        # Parse measurements
         z_v: float = odom_msg.twist.twist.linear.x
         z_w: float = odom_msg.twist.twist.angular.z
         z_scan: list[float] = scan_msg.ranges
 
-        # Execute particle filter
         self._execute_motion_step(z_v, z_w)
         x_h, y_h, theta_h = self._execute_measurement_step(z_scan)
         self._steps += 1
 
-        # Publish
         self._publish_pose_estimate(x_h, y_h, theta_h, odom_msg.header.stamp)
 
     def _execute_measurement_step(self, z_scan: list[float]) -> tuple[float, float, float]:
         pose = (float("inf"), float("inf"), float("inf"))
-        # VÍA LENTA: Calcular probabilidades y DBSCAN SOLO cada 10 pasos
+
         if not self._steps % self._steps_btw_sense_updates:
-            # start_time = time.perf_counter()
             self._particle_filter.resample(z_scan)
-            # sense_time = time.perf_counter() - start_time
-            # self.get_logger().warning(f"Sense step time: {sense_time:6.3f} s")
-            # start_time = time.perf_counter()
+
             self._localized, pose = self._particle_filter.compute_pose()  # DBSCAN o Media
-            # clustering_time = time.perf_counter() - start_time
-            # self.get_logger().warning(f"Clustering time: {clustering_time:6.3f} s")
+
         else:
-            # VÍA RÁPIDA: Si no toca resample, pero estamos localizados,
-            # actualizamos la pose usando la media (muy rápido)
             if self._localized:
                 self._localized, pose = self._particle_filter.compute_pose()
 

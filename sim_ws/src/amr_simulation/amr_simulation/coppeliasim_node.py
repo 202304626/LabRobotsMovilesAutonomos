@@ -70,12 +70,10 @@ class CoppeliaSimNode(LifecycleNode):
             self._robot = TurtleBot3Burger(self._coppeliasim.sim, dt)
             self._localized = False
 
-            # Publishers
-            # TODO: 2.4. Create the /odometry (Odometry message) and /scan (LaserScan) publishers.
             self._odometry_publisher = self.create_publisher(
                 msg_type=Odometry,
                 topic="odometry",
-                qos_profile=10,  # we may need: ros2 topic info odometry -v
+                qos_profile=10,
             )
 
             self._laserScan_publisher = self.create_publisher(
@@ -83,42 +81,32 @@ class CoppeliaSimNode(LifecycleNode):
             )
 
             # Subscribers
-            if (
-                not enable_localization
-            ):  # In this case we go to the callback with just a TwistStamped (cmd_vel) message
-                # TODO: 2.12. Subscribe to /cmd_vel. Connect it with with _next_step_callback.
+            if not enable_localization:
                 self._cmd_vel_suscriber = self.create_subscription(
                     TwistStamped, "cmd_vel", self._next_step_callback, 10
                 )
 
-            # TODO: 3.3. Sync the /pose and /cmd_vel subscribers if enable_localization is True.
             else:
-                # In this case we want to use the callback with both messages, with synchronization:
-                # We define an empty list of suscribers
                 self._subscribers: list[message_filters.Subscriber] = []
 
-                # Append the cmd vel suscriber
                 self._subscribers.append(
                     message_filters.Subscriber(
                         self, TwistStamped, "cmd_vel", qos_profile=QoSProfile(depth=10)
                     )
                 )
 
-                # Append the pose suscriber
                 self._subscribers.append(
                     message_filters.Subscriber(
                         self, PoseStamped, "pose", qos_profile=QoSProfile(depth=10)
                     )
                 )
 
-                # We wait until we receive all the measurements, and then we invoke the callback
                 ts = message_filters.ApproximateTimeSynchronizer(
                     self._subscribers,
-                    queue_size=5,  # number of messages of each topic we need to receive until we are "completed"
-                    slop=10,  # max delay in seconds to consider that 2 messages are able to be syncronized
+                    queue_size=10,
+                    slop=10,
                 )
 
-                # We register the callback that we want to execute once the measurements are received
                 ts.registerCallback(self._next_step_callback)
 
         except Exception:
@@ -134,10 +122,8 @@ class CoppeliaSimNode(LifecycleNode):
             state: Current lifecycle state.
 
         """
-        # self.get_logger().info(f"Transitioning from '{state.label}' to 'active' state.")
 
         try:
-            # Initial method calls
             self._next_step_callback(cmd_vel_msg=TwistStamped())
 
         except Exception:
@@ -161,13 +147,11 @@ class CoppeliaSimNode(LifecycleNode):
                     pose_msg: Message containing the estimated robot pose.
         1
         """
-        if hasattr(self, '_goal_reached') and self._goal_reached:
+        if hasattr(self, "_goal_reached") and self._goal_reached:
             return
-        
-        # Check estimated pose
+
         self._check_estimated_pose(pose_msg)
 
-        # TODO: 2.13. Parse the velocities from the TwistStamped message (i.e., read v and w).
         v: float = cmd_vel_msg.twist.linear.x
         w: float = cmd_vel_msg.twist.angular.z
 
@@ -175,8 +159,6 @@ class CoppeliaSimNode(LifecycleNode):
         self._robot.move(v, w)
         self._coppeliasim.next_step()
         z_scan, z_v, z_w = self._robot.sense()
-
-        # self.get_logger().info(f"Odometry: z_v = {z_v:.3f} m/s, w = {z_w:+.3f} rad/s")
 
         # Check goal
         if self._check_goal():
@@ -271,7 +253,6 @@ class CoppeliaSimNode(LifecycleNode):
             z_w: Angular velocity of the robot center [rad/s].
 
         """
-        # TODO: 2.5. Complete the function body with your code (i.e., replace the pass statement).
         msg = Odometry()
         msg.header.stamp = self.get_clock().now().to_msg()
         msg.twist.twist.linear.x = z_v
@@ -286,7 +267,6 @@ class CoppeliaSimNode(LifecycleNode):
             z_scan: Distance from every ray to the closest obstacle in counterclockwise order [m].
 
         """
-        # TODO: 2.6. Complete the function body with your code (i.e., replace the pass statement).
 
         msg = LaserScan()
 

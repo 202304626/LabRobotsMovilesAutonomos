@@ -17,9 +17,7 @@ from matplotlib import pyplot as plt
 
 from ament_index_python.packages import get_package_share_directory
 
-import amr_localization.maps_cpp as maps_cpp
-
-import heapq  # Importamos la cola de prioridad de alto rendimiento
+import heapq
 import math
 
 
@@ -53,19 +51,14 @@ class PRM:
             simulation: True if running in simulation, False if running on the real robot.
 
         """
-        #################################################################
-        # Obtenemos la ruta absoluta al archivo del mapa de forma segura
+
         pkg_dir = get_package_share_directory("amr_localization")
 
-        # OJO: Asumimos que map_path viene solo con el nombre del archivo (ej: "project.json")
-        # Si map_path ya trae "maps/project.json", puedes usar os.path.basename(map_path)
-        # para quedarte solo con el nombre y que el join no falle.
-        # Por seguridad, usaremos os.path.basename:
         map_filename = os.path.basename(map_path)
         absolute_map_path = os.path.join(pkg_dir, "maps", map_filename)
 
         self._map = Map(
-            absolute_map_path,  # <--- Pasamos la ruta absoluta
+            absolute_map_path,
             sensor_range_max,
             compiled_intersect=True,
             use_regions=False,
@@ -98,11 +91,10 @@ class PRM:
             Path to the destination. The first value corresponds to the initial location.
         """
 
-        # Check if the goal is valid
         if not self._map.contains(goal):
             raise ValueError("Goal location is outside the environment.")
         ancestors: dict[tuple[float, float], tuple[float, float]] = {}
-        # Encontrar los nodos más cercanos de forma vectorizada/nativa rápida
+
         closest_start_node = min(
             self._graph.keys(),
             key=lambda node: math.hypot(node[0] - start[0], node[1] - start[1]),
@@ -113,43 +105,37 @@ class PRM:
         )
         ancestors[goal] = closest_goal_node
         ancestors[closest_start_node] = start
-        # Diccionario para rastrear el coste real (G) más barato a cada nodo
+
         g_scores = {closest_start_node: 0.0}
 
-        # open_list será nuestro Min-Heap (Cola de prioridad)
-        # Guardaremos tuplas de la forma: (F_score, G_score, nodo_tupla)
-        # heapq extrae SIEMPRE el de menor F_score en O(1)
         open_list = []
         initial_h = math.hypot(closest_start_node[0] - goal[0], closest_start_node[1] - goal[1])
         heapq.heappush(open_list, (initial_h, 0.0, closest_start_node))
 
         closed_list = set()
         while open_list:
-            # Extraemos el nodo con el menor F_score de forma instantánea
             current_f, current_g, current_node = heapq.heappop(open_list)
-            # Si hemos llegado al objetivo, reconstruimos el camino
+
             if current_node == closest_goal_node:
                 return self._reconstruct_path(start, goal, ancestors)
-            # Si ya expandimos este nodo con un coste mejor o igual, lo ignoramos
+
             if current_node in closed_list:
                 continue
             closed_list.add(current_node)
             for neighbor in self._graph[current_node]:
                 if neighbor in closed_list:
                     continue
-                # Distancia euclídea ultrarrápida usando math.hypot
+
                 dist = math.hypot(current_node[0] - neighbor[0], current_node[1] - neighbor[1])
                 tentative_g = current_g + dist
-                # Si descubrimos un camino mejor hacia el vecino
+
                 if neighbor not in g_scores or tentative_g < g_scores[neighbor]:
                     ancestors[neighbor] = current_node
                     g_scores[neighbor] = tentative_g
 
-                    # Heurística al objetivo
                     h = math.hypot(neighbor[0] - goal[0], neighbor[1] - goal[1])
                     f_score = tentative_g + h
 
-                    # Empujamos el vecino a la cola de prioridad en O(log N)
                     heapq.heappush(open_list, (f_score, tentative_g, neighbor))
         raise ValueError("No path found from start to goal.")
 
@@ -175,45 +161,37 @@ class PRM:
         Returns: Smoothed path (initial location first) in (x, y) [m] format.
 
         """
-        # TODO: 4.5. Complete the function body (i.e., load smoothed_path).
 
-        ### Add additional points
+        path_arr = np.array(path, dtype=float)
+
         if additional_smoothing_points > 0:
-            new_path = []
-            for i in range(len(path) - 1):
-                p_i = path[i]
-                p_next = path[i + 1]
+            pts_per_segment = additional_smoothing_points + 1
 
-                new_path.append(p_i)
+            t = np.linspace(0, 1, pts_per_segment, endpoint=False)
 
-                vector = np.array(p_next) - np.array(p_i)
+            diffs = path_arr[1:] - path_arr[:-1]
 
-                for j in range(1, additional_smoothing_points + 1):
-                    intermediate_point = (
-                        p_i[0] + vector[0] * j / (additional_smoothing_points + 1),
-                        p_i[1] + vector[1] * j / (additional_smoothing_points + 1),
-                    )
-                    new_path.append(intermediate_point)
+            new_pts = path_arr[:-1, None, :] + diffs[:, None, :] * t[None, :, None]
 
-            new_path.append(path[-1])
+            path_arr = np.vstack((new_pts.reshape(-1, 2), path_arr[-1]))
 
-            path = new_path
-
-        path_arr = np.array(path)
         s = np.copy(path_arr)
-        while True:
-            s_anterior = np.copy(s)
 
-            # ¡Vectorización de NumPy! Actualizamos todos los puntos interiores de golpe
-            # s[1:-1] representa todos los puntos menos el primero y el último
-            s[1:-1] = (
-                s[1:-1]
-                + data_weight * (path_arr[1:-1] - s[1:-1])
-                + smooth_weight * (s[2:] + s[:-2] - 2 * s[1:-1])
+        target_pull = data_weight * path_arr[1:-1]
+
+        while True:
+            delta = (
+                target_pull
+                - (data_weight * s[1:-1])
+                + smooth_weight * (s[2:] + s[:-2] - 2.0 * s[1:-1])
             )
-            # Comprobación de convergencia
-            if np.sum(np.abs(s_anterior - s)) < tolerance:
-                return [tuple(p) for p in s]
+
+            s[1:-1] += delta
+
+            if np.sum(np.abs(delta)) < tolerance:
+                break
+
+        return list(map(tuple, s))
 
     def plot(
         self,
@@ -334,24 +312,22 @@ class PRM:
         tree = cKDTree(nodes)
         pairs = tree.query_pairs(connection_distance)
 
-        # ¡ESTA ES LA LÍNEA QUE FALTABA! Convierte el set en lista
         pairs_list = list(pairs)
         if not pairs_list:
             return graph
-        # Preparamos TODOS los pares en un solo Array NumPy Nx4
-        pairs_array = np.array(list(pairs)) # Array de índices Nx2
-        nodes_array = np.array(nodes)       # Array de nodos Mx2
-        # Obtenemos todos los puntos de inicio y fin de una vez
+
+        pairs_array = np.array(list(pairs))
+        nodes_array = np.array(nodes)
+
         starts = nodes_array[pairs_array[:, 0]]
         ends = nodes_array[pairs_array[:, 1]]
-        # Los concatenamos horizontalmente para tener el formato Nx4
+
         segments_array = np.hstack((starts, ends))
 
-        # ¡¡EL GRAN LLAMADO A C++!! Verifica miles de segmentos en menos de 1ms
         crosses_mask = self._map.batch_crosses(segments_array)
 
         for idx, (i, j) in enumerate(pairs_list):
-            if not crosses_mask[idx]:  # Si C++ dice que no cruza, lo añadimos
+            if not crosses_mask[idx]:
                 node1 = nodes[i]
                 node2 = nodes[j]
                 graph[node1].append(node2)
@@ -394,7 +370,7 @@ class PRM:
                 x_min : x_max + grid_size : grid_size,
                 y_min : y_max + grid_size : grid_size,
             ]
-            # Para el grid, empaquetamos todos los puntos y los filtramos de golpe
+
             xs = grid[0].flatten()
             ys = grid[1].flatten()
             points_to_check = np.column_stack((xs, ys))
@@ -415,7 +391,6 @@ class PRM:
                 batch_y = np.random.uniform(low=y_min, high=y_max, size=batch_size)
                 points_to_check = np.column_stack((batch_x, batch_y))
 
-                # ¡MAGIA C++!
                 valid_mask = self._map.batch_contains(points_to_check)
 
                 valid_xs = batch_x[valid_mask]
@@ -450,14 +425,13 @@ class PRM:
 
         """
         path: list[tuple[float, float]] = []
-
-        # TODO: 4.4. Complete the missing function body with your code.
+        append_node = path.append
 
         current_node = goal
         while current_node != start:
-            path.append(current_node)
+            append_node(current_node)
             current_node = ancestors[current_node]
-        path.append(start)
+        append_node(start)
         path.reverse()
 
         return path
