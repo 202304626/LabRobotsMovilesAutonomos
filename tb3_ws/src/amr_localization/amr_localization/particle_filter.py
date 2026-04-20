@@ -102,7 +102,7 @@ class ParticleFilter:
             np.sin(theta)[:, None]
         ])
 
-        clustering = DBSCAN(eps=0.2, min_samples=5).fit(particles_projected)       
+        clustering = DBSCAN(eps=0.2, min_samples=10, n_jobs = -1,algorithm="kd_tree").fit(particles_projected)       
         labels = clustering.labels_
         n_clusters = len(set(labels) - {-1})
         indexes = clustering.core_sample_indices_
@@ -141,9 +141,15 @@ class ParticleFilter:
             pose = (x_mean, y_mean, theta_mean)
 
             self._particle_count = 50
+            
 
         elif n_clusters > 1:
-            self._particle_count = max(int(50 * n_clusters), 50)
+            if n_clusters > 3:
+
+                self._particle_count = max(int(100 * n_clusters), 70)
+            else:
+                self._particle_count = max(int(70 * n_clusters), 70)
+
 
         #print(localized, flush=True)
         

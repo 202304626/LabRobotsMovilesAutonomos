@@ -25,6 +25,7 @@ class PurePursuit:
         self._lookahead_distance: float = lookahead_distance
         self._path: list[tuple[float, float]] = []
         self._simulation: bool = simulation
+        self._initial_alignment_done = False
 
     def compute_commands(self, x: float, y: float, theta: float) -> tuple[float, float]:
         if not self._path or len(self._path) == 0:
@@ -49,14 +50,16 @@ class PurePursuit:
         # Config params
         v_min = 0.10  # constant velocity, we change it later but rn constant
         v_max = 0.22  # max v vel
-        max_angle = math.radians(20)   # max angle
+        max_angle = math.radians(15)   # max angle
  
-        if (
-            abs(alpha) > max_angle
-        ):  # if the angle is too big, we can not try to go making the circle
-            # Turn in place with max angular velocity, alpha = beta - theta, if alpha positive we need left turn, if negative right turn, this in sim, in real change dirs
-            w = 0.5 * np.sign(alpha)
-            return 0.0, w
+        if not self._initial_alignment_done:
+            if abs(alpha) > max_angle:
+
+                v_cmd = 0.0
+                w_cmd = 0.5 * np.sign(alpha)
+                return v_cmd, w_cmd
+            else:
+                self._initial_alignment_done = True
  
         # Calculate v
         v_desired = v_max * (

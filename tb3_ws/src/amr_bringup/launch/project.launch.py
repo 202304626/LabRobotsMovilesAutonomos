@@ -18,7 +18,7 @@ def generate_launch_description():
             {
                 "enable_plot": True,
                 "global_localization": True,
-                "particles": 2000,
+                "particles": 5000,
                 "sigma_v": 0.1,
                 "sigma_w": 0.25,
                 "sigma_z": 0.15,
@@ -39,15 +39,15 @@ def generate_launch_description():
         parameters=[
             {
                 "connection_distance": 0.3,
-                "enable_plot": True,
+                "enable_plot": False,
                 "goal": goal,
-                "grid_size": 0.2,
+                "grid_size": 0.15, # 0.2
                 "node_count": 250,
-                "obstacle_safety_distance": 0.12,
+                "obstacle_safety_distance": 0.15, # 0.12
                 "simulation": simulation,
                 "smoothing_additional_points": 3,
-                "smoothing_data_weight": 0.1,
-                "smoothing_smooth_weight": 0.25,
+                "smoothing_data_weight": 0.25,
+                "smoothing_smooth_weight": 0.05, # 0.1
                 "use_grid": True,
                 "world": world,
             }
