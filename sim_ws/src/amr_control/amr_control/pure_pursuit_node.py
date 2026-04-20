@@ -107,7 +107,6 @@ class PurePursuitNode(LifecycleNode):
             path_msg: Message containing the (smoothed) path.
 
         """
-        # TODO: 4.8. Complete the function body with your code (i.e., replace the pass statement).
         path_coordinates = [(pose.pose.position.x, pose.pose.position.y) for pose in path_msg.poses]
 
         self._pure_pursuit.path = path_coordinates

@@ -1,9 +1,10 @@
 import datetime
-import numpy as np
 import os
-import pytz
 import random
 import time
+
+import numpy as np
+import pytz
 
 # This try-except enables local debugging of the PRM class
 try:
@@ -11,10 +12,8 @@ try:
 except ImportError:
     from maps import Map
 
-from matplotlib import pyplot as plt
-
-
 from ament_index_python.packages import get_package_share_directory
+from matplotlib import pyplot as plt
 
 
 class PRM:
@@ -47,34 +46,17 @@ class PRM:
             simulation: True if running in simulation, False if running on the real robot.
 
         """
-        #################################################################
-        # Obtenemos la ruta absoluta al archivo del mapa de forma segura
         pkg_dir = get_package_share_directory("amr_localization")
-
-        # OJO: Asumimos que map_path viene solo con el nombre del archivo (ej: "project.json")
-        # Si map_path ya trae "maps/project.json", puedes usar os.path.basename(map_path)
-        # para quedarte solo con el nombre y que el join no falle.
-        # Por seguridad, usaremos os.path.basename:
         map_filename = os.path.basename(map_path)
         absolute_map_path = os.path.join(pkg_dir, "maps", map_filename)
 
         self._map = Map(
-            absolute_map_path,  # <--- Pasamos la ruta absoluta
+            absolute_map_path,
             sensor_range_max,
             compiled_intersect=False,
             use_regions=False,
             safety_distance=0.08,
         )
-        #############################################################
-        """
-        self._map: Map = Map(
-            map_path,
-            sensor_range=sensor_range_max,
-            safety_distance=obstacle_safety_distance,
-            compiled_intersect=False,
-            use_regions=False,
-        )
-        """
 
         self._graph: dict[tuple[float, float], list[tuple[float, float]]] = self._create_graph(
             use_grid,
@@ -114,7 +96,6 @@ class PRM:
 
         ancestors: dict[tuple[float, float], tuple[float, float]] = {}  # {(x, y: (x_prev, y_prev)}
 
-        # TODO: 4.3. Complete the function body (i.e., replace the code below).
         path: list[tuple[float, float]] = []
 
         # Find the closest nodes in the graph to the start and goal locations
@@ -184,9 +165,8 @@ class PRM:
         Returns: Smoothed path (initial location first) in (x, y) [m] format.
 
         """
-        # TODO: 4.5. Complete the function body (i.e., load smoothed_path).
 
-        ### Add additional points
+        # Add additional points
         if additional_smoothing_points > 0:
             new_path = []
             for i in range(len(path) - 1):
@@ -347,7 +327,6 @@ class PRM:
         Returns: A modified graph with lists of connected nodes as values.
 
         """
-        # TODO: 4.2. Complete the missing function body with your code.
 
         for node in graph.keys():
             for other_node in graph.keys():
@@ -403,7 +382,6 @@ class PRM:
         """
         graph: dict[tuple[float, float], list[tuple[float, float]]] = {}
 
-        # TODO: 4.1. Complete the missing function body with your code.
         x_min, y_min, x_max, y_max = self._map.bounds()
 
         if use_grid:

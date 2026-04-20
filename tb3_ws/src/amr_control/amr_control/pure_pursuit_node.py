@@ -1,12 +1,11 @@
-import rclpy
-from rclpy.lifecycle import LifecycleNode, LifecycleState, TransitionCallbackReturn
-
-from amr_msgs.msg import PoseStamped, ControlStop
-from geometry_msgs.msg import Twist
-from nav_msgs.msg import Path
-
 import math
 import traceback
+
+import rclpy
+from amr_msgs.msg import ControlStop, PoseStamped
+from geometry_msgs.msg import Twist
+from nav_msgs.msg import Path
+from rclpy.lifecycle import LifecycleNode, LifecycleState, TransitionCallbackReturn
 from transforms3d.euler import quat2euler
 
 from amr_control.pure_pursuit import PurePursuit
@@ -54,12 +53,14 @@ class PurePursuitNode(LifecycleNode):
             self._subscriber_pose = self.create_subscription(
                 PoseStamped, "pose", self._compute_commands_callback, 10
             )
-            self._subscriber_path = self.create_subscription(Path, "path", self._path_callback, 10)
+            self._subscriber_path = self.create_subscription(
+                Path, "path", self._path_callback, 10
+            )
 
             self._subsciber_stop_msg = self.create_subscription(
                 ControlStop, "stop_condition", self._stop_msg_callback, 10
             )
-            
+
             self._robot_state_stop = False
             self._last_v = 0.0
             self._last_w = 0.0
@@ -97,11 +98,9 @@ class PurePursuitNode(LifecycleNode):
             pose_msg: Message containing the estimated robot pose.
 
         """
-
-        """self.get_logger().info(f"publicnado cmd_vel")"""
         if self._robot_state_stop:
             return
-        
+
         if pose_msg.localized:
             # Parse pose
             x = pose_msg.pose.position.x
@@ -115,8 +114,6 @@ class PurePursuitNode(LifecycleNode):
 
             # Execute pure pursuit
             v, w = self._pure_pursuit.compute_commands(x, y, theta)
-            #self.get_logger().warning(f"Commands: v = {v:.3f} m/s, w = {w:+.3f} rad/s")
-            # self._logger.warning(f"Actual Pose (x,y,theta): {x:.2f}, {y:.2f}, {math.degrees(theta):.1f}.")
 
             # Publish
             self._publish_velocity_commands(v, w)
@@ -128,10 +125,11 @@ class PurePursuitNode(LifecycleNode):
             path_msg: Message containing the (smoothed) path.
 
         """
-        # TODO: 4.8. Complete the function body with your code (i.e., replace the pass statement).
-        path_coordinates = [(pose.pose.position.x, pose.pose.position.y) for pose in path_msg.poses]
+        path_coordinates = [
+            (pose.pose.position.x, pose.pose.position.y) for pose in path_msg.poses
+        ]
 
-        self._logger.warn(f"Path received.")
+        self._logger.warn("Path received.")
 
         self._pure_pursuit.path = path_coordinates
 
@@ -146,12 +144,10 @@ class PurePursuitNode(LifecycleNode):
         self._last_v = v
         self._last_w = w
         msg = Twist()
-        # msg.header.stamp = self.get_clock().now().to_msg()
         msg.linear.x = float(v)
         msg.angular.z = -float(w)
         self._publisher.publish(msg)
 
-    
     def _stop_msg_callback(self, stop_msg: ControlStop):
         """Subscriber callback. Stops the robot if a stop condition is met.
 
@@ -162,7 +158,7 @@ class PurePursuitNode(LifecycleNode):
         if stop_msg.stop_robot:
             self.get_logger().info("Stop condition met. Stopping the robot.")
             self._publish_velocity_commands(0.0, 0.0)
-        
+
         self._robot_state_stop = stop_msg.stop_robot
 
 

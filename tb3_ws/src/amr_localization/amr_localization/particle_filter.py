@@ -1,15 +1,17 @@
 import datetime
 import math
-import numpy as np
 import os
-import pytz
 import random
-from scipy.stats import norm
-from amr_localization.maps import Map
+
 import matplotlib
 matplotlib.use("Agg")
+import numpy as np
+import pytz
 from matplotlib import pyplot as plt
+from scipy.stats import norm
 from sklearn.cluster import DBSCAN
+
+from amr_localization.maps import Map
 
 
 class ParticleFilter:
@@ -27,7 +29,11 @@ class ParticleFilter:
         sensor_range_min: float = 0.16,
         global_localization: bool = True,
         initial_pose: tuple[float, float, float] = (float("nan"), float("nan"), float("nan")),
-        initial_pose_sigma: tuple[float, float, float] = (float("nan"), float("nan"), float("nan")),
+        initial_pose_sigma: tuple[float, float, float] = (
+            float("nan"),
+            float("nan"),
+            float("nan"),
+        ),
         logger=None,
         simulation: bool = False,
     ):
@@ -87,8 +93,6 @@ class ParticleFilter:
             pose: Robot pose estimate (x, y, theta) [m, m, rad].
 
         """
-        # TODO: 3.10. Complete the missing function body with your code.
-
         localized = False
         pose = (float("nan"), float("nan"), float("nan"))
 
@@ -99,17 +103,20 @@ class ParticleFilter:
         particles_projected = np.hstack([
             particles_projected[:, :-1],
             np.cos(theta)[:, None],
-            np.sin(theta)[:, None]
+            np.sin(theta)[:, None],
         ])
 
-        clustering = DBSCAN(eps=0.2, min_samples=10, n_jobs = -1,algorithm="kd_tree").fit(particles_projected)       
+        clustering = DBSCAN(
+            eps=0.2, min_samples=10, n_jobs=-1, algorithm="kd_tree"
+        ).fit(particles_projected)
         labels = clustering.labels_
         n_clusters = len(set(labels) - {-1})
         indexes = clustering.core_sample_indices_
         self._logger.warning(f"Number of clusters: {n_clusters}")
+
         for cluster_id in set(labels):
             if cluster_id == -1:
-                continue  # ignorar ruido
+                continue
 
             cluster_points = np.array(self._particles)[labels == cluster_id]
 
@@ -124,10 +131,9 @@ class ParticleFilter:
                 f"Cluster {cluster_id} -> particle count: {len(cluster_points)}"
             )
 
-
         if n_clusters == 1:
             localized = True
-            
+
             cluster_particles = np.array(self._particles[indexes], dtype=float)
 
             x_mean = np.mean(cluster_particles[:, 0])
@@ -135,36 +141,28 @@ class ParticleFilter:
 
             theta_mean = math.atan2(
                 np.mean(np.sin(cluster_particles[:, -1])),
-                np.mean(np.cos(cluster_particles[:, -1])) 
+                np.mean(np.cos(cluster_particles[:, -1])),
             ) % (2 * math.pi)
 
             pose = (x_mean, y_mean, theta_mean)
 
             self._particle_count = 50
-            
 
         elif n_clusters > 1:
             if n_clusters > 3:
-
                 self._particle_count = max(int(100 * n_clusters), 70)
             else:
                 self._particle_count = max(int(70 * n_clusters), 70)
 
-
-        #print(localized, flush=True)
-        
         if self._logger:
             if localized:
                 pass
-                """self._logger.warning(
-                    f"✅ [DBSCAN] LOCALIZADO! Clústeres: {n_clusters}. "
-                    f"Pose: X={pose[0]:.2f}, Y={pose[1]:.2f}, Theta={pose[2]:.2f} rad"
-                )"""
             else:
                 self._logger.warning(
-                    f"⏳ [DBSCAN] Buscando... Clústeres: {n_clusters}. Partículas: {self._particle_count}"
+                    f"[DBSCAN] Searching... Clusters: {n_clusters}. "
+                    f"Particles: {self._particle_count}"
                 )
-                
+
         return localized, pose
 
     def move(self, v: float, w: float) -> None:
@@ -177,7 +175,6 @@ class ParticleFilter:
         """
         self._iteration += 1
 
-        # TODO: 3.5. Complete the function body with your code.
         # We assume that v and w are measured with respect of the robot
 
         for particle in self._particles:
@@ -188,7 +185,7 @@ class ParticleFilter:
             noise_v = np.random.normal(loc=0, scale=self._sigma_v)
             noise_w = np.random.normal(loc=0, scale=self._sigma_w)
 
-            # Proyect the velocities to the x,y axis (global world axis)
+            # Project the velocities to the x,y axis (global world axis)
             x_vel = np.cos(theta_o) * (v + noise_v)
             y_vel = np.sin(theta_o) * (v + noise_v)
 
@@ -207,7 +204,7 @@ class ParticleFilter:
             )
 
             if colissions:
-                # Readjust the position of the particle, to avoid traspassing the wall
+                # Readjust the position of the particle, to avoid trespassing the wall
                 particle[0] = colissions[0]
                 particle[1] = colissions[1]
 
@@ -219,38 +216,32 @@ class ParticleFilter:
 
         """
         probabilities = np.array(
-    [self._measurement_probability(measurements, particle) for particle in self._particles],
-    dtype=float,
-)
+            [self._measurement_probability(measurements, particle) for particle in self._particles],
+            dtype=float,
+        )
 
         probabilities = np.nan_to_num(probabilities, nan=0.0, posinf=0.0, neginf=0.0)
 
         total = np.sum(probabilities)
 
-        # Si todos los pesos son 0 o inválidos, usar distribución uniforme
+        # If all weights are 0 or invalid, use a uniform distribution
         if total <= 0.0 or not np.isfinite(total):
             probabilities = np.ones(len(self._particles), dtype=float) / len(self._particles)
         else:
             probabilities = probabilities / total
+
         n = self._particle_count
-        rand_numbers = np.random.uniform(0, 1 / n) + np.arange(n) / n  # array of stratas
-        # we sum the weights in order to apply the  stratific samples
+        rand_numbers = np.random.uniform(0, 1 / n) + np.arange(n) / n  # array of strata
+        # we sum the weights in order to apply the stratified samples
         weight_circle = np.cumsum(probabilities)
         # we choose the largest weight whose cumulative value does not exceed the strat.
         prominent_weights = np.digitize(rand_numbers, weight_circle)
         prominent_weights = np.clip(prominent_weights, 0, len(self._particles) - 1)
 
-        # weight_distances = weight_circle - rand_numbers.reshape(n, 1)
-        # positive_weight_distances = np.where(weight_distances < 0, 1, weight_distances)
-
-        # prominent_weights = np.argmin(positive_weight_distances, axis=1)
-
         self._particles = self._particles[prominent_weights]
 
         if self._logger is not None:
-            self._logger.warning(f"Ejecutando resample. Nº Particulas: {len(self._particles)}.")
-
-        # TODO: 3.9. Complete the function body with your code (i.e., replace the pass statement).
+            self._logger.warning(f"Running resample. Particle count: {len(self._particles)}.")
 
     def plot(self, axes, orientation: bool = True):
         """Draws particles.
@@ -350,8 +341,6 @@ class ParticleFilter:
         """
         particles = np.empty((particle_count, 3), dtype=float)
 
-        # TODO: 3.4. Complete the missing function body with your code.
-
         # Extract the bounds of the map
         x_min, y_min, x_max, y_max = self._map.bounds()
 
@@ -397,8 +386,6 @@ class ParticleFilter:
         Returns: List of predicted measurements; nan if a sensor is out of range.
 
         """
-
-        # TODO: 3.6. Complete the missing function body with your code.
         rays = np.arange(0, 240, 240 // 8).tolist()
 
         segments = self._lidar_rays(pose=pose, indices=rays)
@@ -422,7 +409,6 @@ class ParticleFilter:
             float: Gaussian value.
 
         """
-        # TODO: 3.7. Complete the function body (i.e., replace the code below).
         return math.exp(-0.5 * ((x - mu) / sigma) ** 2) / (sigma * math.sqrt(2 * math.pi))
 
     def _lidar_rays(
@@ -474,17 +460,9 @@ class ParticleFilter:
             float: Probability.
 
         """
-
-        # TODO: 3.8. Complete the missing function body with your code.
-
         probability = 1.0
         predicted_measurements = self._sense(pose=particle)
 
-        n = len(measurements)
-        rays = range(0,n,max(n//8,1))
-        # rays = range(0, 240, 240 // 8)
-        subsampled_measurements = [measurements[i] for i in rays]
-        
         n = len(measurements)
         step = max(n // 8, 1)
         rays = list(range(0, n, step))
@@ -492,7 +470,7 @@ class ParticleFilter:
         for i, (ray_idx, predicted_measurement) in enumerate(zip(rays, predicted_measurements)):
             measurement = measurements[ray_idx]
 
-            # --- FIX measurement ---
+            # Fix measurement
             if math.isinf(measurement) or math.isnan(measurement) or measurement <= 0.0:
                 neighbor_indices = [
                     j for j in range(ray_idx - 2, ray_idx + 3)
@@ -512,7 +490,7 @@ class ParticleFilter:
                 else:
                     continue
 
-            # --- FIX predicted_measurement ---
+            # Fix predicted_measurement
             if (
                 math.isinf(predicted_measurement)
                 or math.isnan(predicted_measurement)
@@ -541,6 +519,5 @@ class ParticleFilter:
                 sigma=self._sigma_z,
                 x=predicted_measurement,
             )
-
 
         return probability

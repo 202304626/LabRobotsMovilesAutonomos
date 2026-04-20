@@ -1,13 +1,12 @@
-import rclpy
-from rclpy.lifecycle import LifecycleNode, LifecycleState, TransitionCallbackReturn
-
-from amr_msgs.msg import PoseStamped as AmrPoseStamped
-from geometry_msgs.msg import PoseStamped
-from nav_msgs.msg import Path
-
 import os
 import time
 import traceback
+
+import rclpy
+from amr_msgs.msg import PoseStamped as AmrPoseStamped
+from geometry_msgs.msg import PoseStamped
+from nav_msgs.msg import Path
+from rclpy.lifecycle import LifecycleNode, LifecycleState, TransitionCallbackReturn
 
 from amr_planning.prm import PRM
 
@@ -91,7 +90,6 @@ class PRMNode(LifecycleNode):
             self.get_logger().info(f"Roadmap creation time: {roadmap_creation_time:1.3f} s")
 
             # Publishers
-            # TODO: 4.6. Create the /path publisher (Path message).
             self._path_publisher = self.create_publisher(Path, "/path", qos_profile=10)
 
             # Subscribers
@@ -157,7 +155,6 @@ class PRMNode(LifecycleNode):
             path: Smoothed path (initial location first) in (x, y) format.
 
         """
-        # TODO: 4.7. Complete the function body with your code (i.e., replace the pass statement).
 
         msg = Path()
         msg.header.stamp = self.get_clock().now().to_msg()

@@ -1,23 +1,23 @@
 #!/usr/bin/env python3
-import rclpy
-from rclpy.lifecycle import LifecycleNode, LifecycleState, TransitionCallbackReturn
-from rclpy.qos import (
-    QoSProfile,
-    QoSDurabilityPolicy,
-    QoSHistoryPolicy,
-    QoSReliabilityPolicy,
-)
-
-import message_filters
-from amr_msgs.msg import PoseStamped, ControlStop
-from nav_msgs.msg import Odometry
-from sensor_msgs.msg import LaserScan
-
 import math
 import os
 import time
 import traceback
+
+import rclpy
+from amr_msgs.msg import ControlStop, PoseStamped
+from nav_msgs.msg import Odometry
+from rclpy.lifecycle import LifecycleNode, LifecycleState, TransitionCallbackReturn
+from rclpy.qos import (
+    QoSDurabilityPolicy,
+    QoSHistoryPolicy,
+    QoSProfile,
+    QoSReliabilityPolicy,
+)
+from sensor_msgs.msg import LaserScan
 from transforms3d.euler import euler2quat
+
+import message_filters
 
 from amr_localization.particle_filter import ParticleFilter
 
@@ -40,8 +40,7 @@ class ParticleFilterNode(LifecycleNode):
         self.declare_parameter("simulation", False)
         self.declare_parameter("steps_btw_sense_updates", 10)
         self.declare_parameter("world", "lab03")
-        
-        # 3.11.3 Declare parameter for saving history
+
         self._odometry_estimate_list = []
         self._scan_last_measures = []
 
@@ -52,17 +51,13 @@ class ParticleFilterNode(LifecycleNode):
             state: Current lifecycle state.
 
         """
-        self.get_logger().info(
-            f"Transitioning from '{state.label}' to 'inactive' state."
-        )
+        self.get_logger().info(f"Transitioning from '{state.label}' to 'inactive' state.")
 
         try:
-
             self._odometry_estimate_list = []
 
             # Parameters
             self.dt = self.get_parameter("dt").get_parameter_value().double_value
-             #dt = self.dt
             self._enable_plot = (
                 self.get_parameter("enable_plot").get_parameter_value().bool_value
             )
@@ -100,11 +95,10 @@ class ParticleFilterNode(LifecycleNode):
             # Attribute and object initializations
             self._localized = False
             self._steps = 0
-            # new
             self._predicted_x = 0.0
             self._predicted_y = 0.0
             self._predicted_theta = 0.0
-            ############
+
             map_path = os.path.realpath(
                 os.path.join(os.path.dirname(__file__), "..", "maps", world + ".json")
             )
@@ -119,14 +113,13 @@ class ParticleFilterNode(LifecycleNode):
                 initial_pose=initial_pose,
                 initial_pose_sigma=initial_pose_sigma,
                 simulation=self._simulation,
-                logger=self.get_logger(),  # Replace None with self.get_logger() to enable logging in the class
+                logger=self.get_logger(),
             )
 
             if self._enable_plot:
                 self._particle_filter.show("Initialization", save_figure=True)
 
             # Publishers
-            # TODO: 3.1. Create the /pose publisher (PoseStamped message).
             self._pose_publisher = self.create_publisher(PoseStamped, "pose", 10)
 
             # Subscribers
@@ -137,21 +130,6 @@ class ParticleFilterNode(LifecycleNode):
                 durability=QoSDurabilityPolicy.VOLATILE,
             )
 
-            # #self._subscribers: list[message_filters.Subscriber] = []
-            # self._subscribers.append(
-            #     message_filters.Subscriber(self, Odometry, "odometry")
-            # )
-            # self._subscribers.append(
-            #     message_filters.Subscriber(
-            #         self, LaserScan, "scan", qos_profile=scan_qos_profile
-            #     )
-            # )
-
-            # ts = message_filters.ApproximateTimeSynchronizer(
-            #     self._subscribers, queue_size=10, slop=9
-            # )
-            # ts.registerCallback(self._compute_pose_callback)
-
             self._scan_subscriber = self.create_subscription(
                 LaserScan, "scan", self._callback_scan_saving_history, scan_qos_profile
             )
@@ -160,7 +138,7 @@ class ParticleFilterNode(LifecycleNode):
                 Odometry, "odometry", self._callback_odometry_saving_history, 10
             )
 
-            # 3.11.2 Create publisher for the stop condition
+            # Create publisher for the stop condition
             self._stop_publisher = self.create_publisher(
                 ControlStop, "stop_condition", 10
             )
@@ -169,8 +147,6 @@ class ParticleFilterNode(LifecycleNode):
 
             self._last_pose = (0.0, 0.0, 0.0)
             self._prev_odom_time: float | None = None
-
-
 
         except Exception:
             self.get_logger().error(f"{traceback.format_exc()}")
@@ -188,20 +164,17 @@ class ParticleFilterNode(LifecycleNode):
         self.get_logger().info(f"Transitioning from '{state.label}' to 'active' state.")
 
         return super().on_activate(state)
-    
+
     def _timer_callback(self):
         """Timer callback to check the stop condition and publish it."""
-
-        # self.get_logger().info(f"a)")
         # a)
         stop_msg = ControlStop()
         stop_msg.stop_robot = True  # We set the stop condition to true if the robot is localized
         stop_msg.header.stamp = self.get_clock().now().to_msg()  # We add the header (stamp)
         self._stop_publisher.publish(stop_msg)  # We publish the stop
-        
+
         # b)
         odometry_estimates = list(self._odometry_estimate_list)
-        # self.get_logger().info(f"b) {odometry_estimates}, {len(odometry_estimates)}")
         for z_v, z_w in odometry_estimates:
             self._execute_motion_step(z_v, z_w)
             self._steps += 1
@@ -211,9 +184,8 @@ class ParticleFilterNode(LifecycleNode):
         # c)
         x_h, y_h, theta_h = 0.0, 0.0, 0.0
         if self._scan_last_measures:
-           x_h, y_h, theta_h = self._execute_measurement_step(self._scan_last_measures)
-           self._scan_last_measures = []
-
+            x_h, y_h, theta_h = self._execute_measurement_step(self._scan_last_measures)
+            self._scan_last_measures = []
 
         # d)
         stop_msg = ControlStop()
@@ -228,9 +200,8 @@ class ParticleFilterNode(LifecycleNode):
         self._predicted_theta = theta_h
         self._last_pose = (x_h, y_h, theta_h)
         self._publish_pose_estimate(self._last_pose[0], self._last_pose[1], self._last_pose[2])
-        
+
         self._timer.reset()
-            
 
     def _compute_pose_callback(self, odom_msg: Odometry, scan_msg: LaserScan):
         """Subscriber callback. Executes a particle filter and publishes (x, y, theta) estimates.
@@ -263,19 +234,16 @@ class ParticleFilterNode(LifecycleNode):
 
         Returns:
             Pose estimate (x_h, y_h, theta_h) [m, m, rad]; inf if cannot be computed.
+
         """
         pose = (float("inf"), float("inf"), float("inf"))
 
-        # if self._localized or not self._steps % self._steps_btw_sense_updates:
         start_time = time.perf_counter()
-        ## here? publish?
         self._particle_filter.resample(z_scan)
         sense_time = time.perf_counter() - start_time
 
-        # self.get_logger().info(f"Sense step time: {sense_time:6.3f} s")
-
         if self._enable_plot:
-            self._particle_filter.show("Sense", save_figure=True, display = True)
+            self._particle_filter.show("Sense", save_figure=True, display=True)
 
         start_time = time.perf_counter()
         self._localized, pose = self._particle_filter.compute_pose()
@@ -291,15 +259,11 @@ class ParticleFilterNode(LifecycleNode):
         Args:
             z_v: Odometric estimate of the linear velocity of the robot center [m/s].
             z_w: Odometric estimate of the angular velocity of the robot center [rad/s].
+
         """
         start_time = time.perf_counter()
         self._particle_filter.move(z_v, z_w)
         move_time = time.perf_counter() - start_time
-
-        # self.get_logger().info(f"Move step time: {move_time:7.3f} s")
-
-        # if self._enable_plot:
-        #     self._particle_filter.show("Move", save_figure=True)
 
     def _publish_pose_estimate(self, x_h: float, y_h: float, theta_h: float) -> None:
         """Publishes the robot's pose estimate in a custom amr_msgs.msg.PoseStamped message.
@@ -310,13 +274,11 @@ class ParticleFilterNode(LifecycleNode):
             theta_h: Heading estimate [rad].
 
         """
-        # TODO: 3.2. Complete the function body with your code (i.e., replace the pass statement).
-
         # Create the msg
         msg = PoseStamped()
         msg.localized = (
             self._localized
-        )  # We add this information wether is true or false
+        )  # We add this information whether it is true or false
         msg.header.stamp = self.get_clock().now().to_msg()  # We add the header (stamp)
 
         if (
@@ -334,11 +296,9 @@ class ParticleFilterNode(LifecycleNode):
             msg.pose.orientation.z = z
 
         self._pose_publisher.publish(msg)  # We publish the msg
-    
 
-    # 3.11.3 Callback functions for saving history of /scan and /odometry subscriptions
-    def _callback_scan_saving_history(self,scan_msg: LaserScan):
-        """Subscriber callback. Executes a particle filter and publishes (x, y, theta) estimates.
+    def _callback_scan_saving_history(self, scan_msg: LaserScan):
+        """Subscriber callback. Saves the latest LiDAR scan for processing in the timer.
 
         Args:
             scan_msg: Message containing LiDAR sensor readings.
@@ -348,14 +308,12 @@ class ParticleFilterNode(LifecycleNode):
         z_scan: list[float] = scan_msg.ranges
         nan_count = sum(math.isnan(x) for x in z_scan)
         if nan_count > 15:
-
             self.get_logger().warn(f"nan lidar rays: {nan_count}")
 
         self._scan_last_measures = z_scan
-    
-    # 3.11.3 /odometry
+
     def _callback_odometry_saving_history(self, odom_msg: Odometry):
-        """Subscriber callback. Executes a particle filter and publishes (x, y, theta) estimates.
+        """Subscriber callback. Saves odometry measurements for processing in the timer.
 
         Args:
             odom_msg: Message containing odometry measurements.
@@ -367,12 +325,11 @@ class ParticleFilterNode(LifecycleNode):
 
         if abs(z_v) >= 0.01 or abs(z_w) >= 0.06:
             self._odometry_estimate_list.append((z_v, z_w))
-            # self.get_logger().warn(f"z_v = {z_v:.3f}, z_w = {z_w:.3f}")
 
         t = odom_msg.header.stamp.sec + odom_msg.header.stamp.nanosec * 1e-9
         if self._localized and self._prev_odom_time is not None:
             actual_dt = t - self._prev_odom_time
-            
+
             self._predicted_x += z_v * math.cos(self._predicted_theta) * actual_dt
             self._predicted_y += z_v * math.sin(self._predicted_theta) * actual_dt
             self._predicted_theta += z_w * actual_dt
@@ -381,10 +338,9 @@ class ParticleFilterNode(LifecycleNode):
                 self._predicted_x, self._predicted_y, self._predicted_theta
             )
 
-            # self.get_logger().warn(f"Odom estimate: {self._predicted_x:.2f}, {self._predicted_y:.2f}, {math.degrees(self._predicted_theta):.2f}")
-        
         self._prev_odom_time = t
-        
+
+
 def main(args=None):
     rclpy.init(args=args)
     particle_filter_node = ParticleFilterNode()
