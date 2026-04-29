@@ -1,0 +1,23 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>tutorial_pubsub_py</name>
+  <version>0.0.0</version>
+  <description>Examples of minimal publisher/subscriber using rclpy</description>  <!-- Metadata of the package -->
+  <maintainer email="202304626@alu.comillas.edu">ros</maintainer>
+  <license>Apache License 2.0</license>
+
+  <test_depend>ament_copyright</test_depend>
+  <test_depend>ament_flake8</test_depend>
+  <test_depend>ament_pep257</test_depend>
+  <test_depend>python3-pytest</test_depend>
+
+  <!-- Lines added during the tutorial -->
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>std_msgs</exec_depend>
+  <!-- This declares the package needs rclpy and std_msgs when its code is executed. -->
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>
